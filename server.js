@@ -13,6 +13,5 @@ mongoose.connect(process.env.MONGO_URI, {
     useUnifiedTopology: true
 }).then(() => console.log("MongoDB connecté"))
     .catch(err => console.log(err));
-app.use('/articles', require('./routes/articleRoutes'));
 app.listen(PORT, () => console.log(`Serveur démarré sur le port
 ${PORT}`));
