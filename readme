@@ -1,0 +1,10 @@
+## Required
+- nvm, node version manager
+- node v18.19.0, install from nvm as a package
+- mongosh, any version above version 2.3 is okay 
+
+## how to run
+` npm install ` 
+to install the dependencies
+create a .env file with the mongo uri (refer to .env-template)
+`npm run start` to run the project and test connection to mongo atlas 
