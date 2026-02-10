@@ -8,3 +8,8 @@
 to install the dependencies
 create a .env file with the mongo uri (refer to .env-template)
 `npm run start` to run the project and test connection to mongo atlas 
+
+## how to connect to mongo db
+- open cmd 
+- run command
+     mongosh "mongodb+srv://m1p13-mean-sergiana-haj.v9iqbkb.mongodb.net/" --apiVersion 1 --username <sergiana>
