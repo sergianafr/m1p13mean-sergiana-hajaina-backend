@@ -12,10 +12,11 @@ const connectDB = require('./config/db');
 app.use(cors());
 app.use(express.json());
 
+
 // Routes
 app.use("/api/auth", require("./routes/auth.route"));
+app.use("/api/type-magasins", require("./routes/type-magasin.route"));
 
 
 connectDB();
-app.listen(PORT, () => console.log(`Serveur démarré sur le port
-${PORT}`));
+app.listen(PORT, () => console.log(`Serveur démarré sur le port ${PORT}`));
