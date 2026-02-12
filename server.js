@@ -14,10 +14,12 @@ app.use(express.json());
 
 
 
+
 // Routes
 app.use("/api/auth", require("./routes/auth.route"));
 app.use("/api/type-magasins", require("./routes/type-magasin.route"));
 app.use("/api/type-produits", require("./routes/type-produit.route"));
+app.use("/api/unites", require("./routes/unite.route"));
 
 
 connectDB();
