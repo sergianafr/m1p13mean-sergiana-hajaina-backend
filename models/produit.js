@@ -9,6 +9,7 @@ const ProduitSchema = new mongoose.Schema(
         },
         descriptionProduit: String,
         seuilNotification: Number,
+        photos: [{url: String, dateAjout: Date}],
         unite: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Unites",
