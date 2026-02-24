@@ -7,6 +7,11 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 app.use(bodyParser.json());
 const connectDB = require('./config/db');
+const cloudinary = require('cloudinary').v2;
+
+cloudinary.config({
+  secure: true
+});
 
 // Middleware
 app.use(cors());

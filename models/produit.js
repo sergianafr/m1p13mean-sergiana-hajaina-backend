@@ -11,17 +11,17 @@ const ProduitSchema = new mongoose.Schema(
         seuilNotification: Number,
         unite: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Unite",
+            ref: "Unites",
             required: true
         },
         typeProduit: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "TypeProduit",
+            ref: "TypeProduits",
             required: true
         },
         magasin: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Magasin",
+            ref: "Magasins",
             required: true
         }
     },
