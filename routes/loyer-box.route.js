@@ -8,6 +8,12 @@ router.post("/", loyerBoxController.save);
 // READ ALL
 router.get("/", loyerBoxController.getAll);
 
+// GET BY BOX - historique des loyers d'un box
+router.get("/box/:boxId", loyerBoxController.getByBox);
+
+// GET CURRENT LOYER BY BOX
+router.get("/box/:boxId/current", loyerBoxController.getCurrentByBox);
+
 // READ ONE
 router.get("/:id", loyerBoxController.getById);
 

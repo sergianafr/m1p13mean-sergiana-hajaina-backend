@@ -19,15 +19,26 @@ exports.register = async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role
+      role: role || 'CLIENT'
     });
 
+    // Generate token for automatic login after registration
+    const token = jwt.sign(
+      {
+        id: user._id,
+        role: user.role
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN }
+    );
+
     res.status(201).json({
-      message: "Utilisateur créé",
+      token,
       user: {
         id: user._id,
         email: user.email,
-        role: user.role
+        role: user.role,
+        name: user.name
       }
     });
   } catch (error) {
