@@ -1,17 +1,14 @@
 const Produit = require("../models/produit");
+const produitService = require("../services/produit.service");
 
 // CREATE
 exports.save = async (req, res) => {
     try {
-        const { nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin } = req.body;
-        const existing = await Produit.findOne({ nomProduit });
-        if (existing) {
-            return res.status(400).json({ message: "Produit déjà existant" });
-        }
-        const produit = await Produit.create({ nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin });
+        const produit = await produitService.createProduit(req.body, req.files || []);
         res.status(201).json({ message: "Produit créé", produit });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        const status = error.message === "Produit déjà existant" || error.message.includes("obligatoires") ? 400 : 500;
+        res.status(status).json({ message: error.message });
     }
 };
 
