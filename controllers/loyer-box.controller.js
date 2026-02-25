@@ -70,3 +70,29 @@ exports.remove = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// GET BY BOX - historique des loyers d'un box
+exports.getByBox = async (req, res) => {
+    try {
+        const { boxId } = req.params;
+        const loyers = await LoyerBox.find({ box: boxId })
+            .populate("box")
+            .sort({ dateDebut: -1 });
+        res.status(200).json(loyers);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// GET CURRENT LOYER BY BOX - loyer le plus récent d'un box
+exports.getCurrentByBox = async (req, res) => {
+    try {
+        const { boxId } = req.params;
+        const loyer = await LoyerBox.findOne({ box: boxId })
+            .populate("box")
+            .sort({ dateDebut: -1 });
+        res.status(200).json(loyer);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
