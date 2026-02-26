@@ -1,5 +1,26 @@
 const MagasinBox = require("../models/magasin-box");
 
+const MAX_DATE = new Date('9999-12-31T23:59:59.999Z');
+
+function buildOverlapQuery({ box, dateDebut, dateFin, excludeId }) {
+    const newStart = new Date(dateDebut);
+    const newEnd = dateFin ? new Date(dateFin) : null;
+
+    const query = {
+        box,
+        $and: [
+            { dateDebut: { $lte: newEnd ?? MAX_DATE } },
+            { $or: [{ dateFin: null }, { dateFin: { $gte: newStart } }] }
+        ]
+    };
+
+    if (excludeId) {
+        query._id = { $ne: excludeId };
+    }
+
+    return query;
+}
+
 // CREATE
 exports.save = async (req, res) => {
     try {
@@ -8,6 +29,16 @@ exports.save = async (req, res) => {
         if (existing) {
             return res.status(400).json({ message: "Association Magasin-Box déjà existante" });
         }
+
+        const overlap = await MagasinBox.findOne(
+            buildOverlapQuery({ box, dateDebut, dateFin })
+        );
+        if (overlap) {
+            return res.status(400).json({
+                message: "Ce box est déjà occupé par un autre magasin sur cette période"
+            });
+        }
+
         const magasinBox = await MagasinBox.create({ magasin, box, dateDebut, dateFin });
         res.status(201).json({ message: "MagasinBox créé", magasinBox });
     } catch (error) {
@@ -44,6 +75,21 @@ exports.update = async (req, res) => {
     try {
         const { id } = req.params;
         const { magasin, box, dateDebut, dateFin } = req.body;
+
+        const existingPair = await MagasinBox.findOne({ _id: { $ne: id }, magasin, box });
+        if (existingPair) {
+            return res.status(400).json({ message: "Association Magasin-Box déjà existante" });
+        }
+
+        const overlap = await MagasinBox.findOne(
+            buildOverlapQuery({ box, dateDebut, dateFin, excludeId: id })
+        );
+        if (overlap) {
+            return res.status(400).json({
+                message: "Ce box est déjà occupé par un autre magasin sur cette période"
+            });
+        }
+
         const updated = await MagasinBox.findByIdAndUpdate(
             id,
             { magasin, box, dateDebut, dateFin },
