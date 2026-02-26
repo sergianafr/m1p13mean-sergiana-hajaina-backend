@@ -18,9 +18,10 @@ exports.getAll = async (req, res) => {
         const produits = await Produit.find().populate("unite typeProduit magasin");
         res.status(200).json(produits);
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: error.message });
     }
-};
+}; 
 
 // READ ONE
 exports.getById = async (req, res) => {

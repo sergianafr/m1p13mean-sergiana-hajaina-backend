@@ -47,6 +47,10 @@ const createProduit = async (dto, files = []) => {
 		magasin
 	} = dto;
 
+	if (!nomProduit || !unite || !typeProduit || !magasin) {
+		throw new Error("nomProduit, unite, typeProduit et magasin sont obligatoires");
+	}
+
 	const existing = await Produit.findOne({ nomProduit }).lean();
 	if (existing) {
 		throw new Error("Produit déjà existant");
