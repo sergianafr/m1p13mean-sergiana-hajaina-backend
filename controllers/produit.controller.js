@@ -56,6 +56,25 @@ exports.update = async (req, res) => {
     }
 };
 
+exports.removePhoto = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { imageUrl } = req.query;
+
+        const produit = await produitService.deleteProduitPhotoByUrl(id, imageUrl);
+        res.status(200).json({ message: "Photo supprimée", produit });
+    } catch (error) {
+        const status =
+            error.message === "produitId et imageUrl sont obligatoires" ||
+            error.message === "Photo non trouvée pour ce produit"
+                ? 400
+                : error.message === "Produit non trouvé"
+                    ? 404
+                    : 500;
+        res.status(status).json({ message: error.message });
+    }
+};
+
 // DELETE
 exports.remove = async (req, res) => {
     try {

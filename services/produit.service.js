@@ -1,5 +1,6 @@
 const Produit = require("../models/produit");
 const cloudinary = require("cloudinary").v2;
+const { deleteImageFromCloudinaryByUrl } = require("./cloudinary.service");
 
 cloudinary.config({ secure: true });
 
@@ -71,6 +72,31 @@ const createProduit = async (dto, files = []) => {
 	return produit;
 };
 
+const deleteProduitPhotoByUrl = async (produitId, imageUrl) => {
+	if (!produitId || !imageUrl) {
+		throw new Error("produitId et imageUrl sont obligatoires");
+	}
+
+	const produit = await Produit.findById(produitId);
+	if (!produit) {
+		throw new Error("Produit non trouvé");
+	}
+
+	const hasPhoto = produit.photos?.some((photo) => photo?.url === imageUrl);
+	if (!hasPhoto) {
+		throw new Error("Photo non trouvée pour ce produit");
+	}
+
+	await deleteImageFromCloudinaryByUrl(imageUrl);
+
+	produit.photos = (produit.photos || []).filter((photo) => photo?.url !== imageUrl);
+	await produit.save();
+
+	return produit;
+};
+
+
 module.exports = {
-	createProduit
+	createProduit,
+	deleteProduitPhotoByUrl
 };

@@ -17,6 +17,9 @@ router.get("/:id", produitController.getById);
 // UPDATE
 router.put("/:id", produitController.update);
 
+// DELETE PHOTO
+router.delete("/:id/photos", produitController.removePhoto);
+
 // DELETE
 router.delete("/:id", produitController.remove);
 
