@@ -41,18 +41,11 @@ exports.getById = async (req, res) => {
 exports.update = async (req, res) => {
     try {
         const { id } = req.params;
-        const { nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin } = req.body;
-        const updated = await Produit.findByIdAndUpdate(
-            id,
-            { nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin },
-            { new: true, runValidators: true }
-        );
-        if (!updated) {
-            return res.status(404).json({ message: "Produit non trouvé" });
-        }
-        res.status(200).json({ message: "Produit mis à jour", produit: updated });
+        const produit = await produitService.updateProduit(id, req.body, req.files || []);
+        res.status(200).json({ message: "Produit mis à jour", produit });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        const status = error.message === "Produit non trouvé" ? 404 : 500;
+        res.status(status).json({ message: error.message });
     }
 };
 

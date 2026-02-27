@@ -2,45 +2,8 @@ const cloudinary = require("cloudinary").v2;
 
 cloudinary.config({ secure: true });
 
-const extractPublicIdFromCloudinaryUrl = (imageUrl) => {
-	if (!imageUrl || typeof imageUrl !== "string") {
-		return null;
-	}
-
-	let parsedUrl;
-	try {
-		parsedUrl = new URL(imageUrl);
-	} catch (error) {
-		return null;
-	}
-
-	const segments = decodeURIComponent(parsedUrl.pathname)
-		.split("/")
-		.filter(Boolean);
-
-	const uploadIndex = segments.findIndex((segment) => segment === "upload");
-	if (uploadIndex === -1 || uploadIndex + 1 >= segments.length) {
-		return null;
-	}
-
-	let publicIdParts = segments.slice(uploadIndex + 1);
-	if (/^v\d+$/.test(publicIdParts[0])) {
-		publicIdParts = publicIdParts.slice(1);
-	}
-
-	if (!publicIdParts.length) {
-		return null;
-	}
-
-	const lastPart = publicIdParts.pop();
-	const withoutExtension = lastPart.replace(/\.[^/.]+$/, "");
-
-	return [...publicIdParts, withoutExtension].join("/");
-};
-
 const deleteImageFromCloudinary = async ({ imageUrl, publicId } = {}) => {
-	const resolvedPublicId =
-		publicId || extractPublicIdFromCloudinaryUrl(imageUrl) || process.env.CLOUDINARY_PUBLIC_ID;
+	const resolvedPublicId = process.env.CLOUDINARY_PUBLIC_ID;
 
 	if (!resolvedPublicId) {
 		throw new Error("Impossible de déterminer le publicId Cloudinary");
@@ -61,11 +24,38 @@ const deleteImageFromCloudinary = async ({ imageUrl, publicId } = {}) => {
 	};
 };
 
+const uploadSingleFileToCloudinary = async (file, folder, resource_type) => {
+	if (!process.env.CLOUDINARY_URL) {
+		throw new Error("CLOUDINARY_URL manquant");
+	}
+
+	const mimeType = file.mimetype || "application/octet-stream";
+	const dataUri = `data:${mimeType};base64,${file.buffer.toString("base64")}`;
+
+	const result = await cloudinary.uploader.upload(dataUri, {
+		folder: folder,
+		resource_type: resource_type,
+		use_filename: true,
+		unique_filename: true
+	});
+
+	const fileUrl = result?.secure_url || result?.url;
+	if (!fileUrl) {
+		throw new Error("Aucune URL image retournée par Cloudinary");
+	}
+
+	return {
+		url: fileUrl,
+		dateAjout: new Date()
+	};
+};
+
+
 const deleteImageFromCloudinaryByUrl = async (imageUrl) =>
 	deleteImageFromCloudinary({ imageUrl });
 
 module.exports = {
 	deleteImageFromCloudinary,
 	deleteImageFromCloudinaryByUrl,
-	extractPublicIdFromCloudinaryUrl
+	uploadSingleFileToCloudinary
 };

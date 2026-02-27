@@ -1,41 +1,15 @@
 const Produit = require("../models/produit");
 const cloudinary = require("cloudinary").v2;
-const { deleteImageFromCloudinaryByUrl } = require("./cloudinary.service");
+const { deleteImageFromCloudinaryByUrl, uploadSingleFileToCloudinary } = require("./cloudinary.service");
 
 cloudinary.config({ secure: true });
-
-const uploadSingleFileToCloudinary = async (file) => {
-	if (!process.env.CLOUDINARY_URL) {
-		throw new Error("CLOUDINARY_URL manquant");
-	}
-
-	const mimeType = file.mimetype || "application/octet-stream";
-	const dataUri = `data:${mimeType};base64,${file.buffer.toString("base64")}`;
-
-	const result = await cloudinary.uploader.upload(dataUri, {
-		folder: "produits",
-		resource_type: "image",
-		use_filename: true,
-		unique_filename: true
-	});
-
-	const imageUrl = result?.secure_url || result?.url;
-	if (!imageUrl) {
-		throw new Error("Aucune URL image retournée par Cloudinary");
-	}
-
-	return {
-		url: imageUrl,
-		dateAjout: new Date()
-	};
-};
 
 const uploadPhotosToCloudinary = async (files = []) => {
 	if (!files.length) {
 		return [];
 	}
 
-	return Promise.all(files.map((file) => uploadSingleFileToCloudinary(file)));
+	return Promise.all(files.map((file) => uploadSingleFileToCloudinary(file, "produits", "image")));
 };
 
 const createProduit = async (dto, files = []) => {
@@ -72,6 +46,34 @@ const createProduit = async (dto, files = []) => {
 	return produit;
 };
 
+const updateProduit = async (produitId, dto, files = []) => {
+	if (!produitId) {
+		throw new Error("produitId est obligatoire");
+	}
+
+	const produit = await Produit.findById(produitId);
+	if (!produit) {
+		throw new Error("Produit non trouvé");
+	}
+
+	const { nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin } = dto;
+
+	if (nomProduit) produit.nomProduit = nomProduit;
+	if (descriptionProduit !== undefined) produit.descriptionProduit = descriptionProduit;
+	if (seuilNotification !== undefined) produit.seuilNotification = seuilNotification;
+	if (unite) produit.unite = unite;
+	if (typeProduit) produit.typeProduit = typeProduit;
+	if (magasin) produit.magasin = magasin;
+
+	if (files && files.length > 0) {
+		const newPhotos = await uploadPhotosToCloudinary(files);
+		produit.photos = [...(produit.photos || []), ...newPhotos];
+	}
+
+	await produit.save();
+	return produit;
+};
+
 const deleteProduitPhotoByUrl = async (produitId, imageUrl) => {
 	if (!produitId || !imageUrl) {
 		throw new Error("produitId et imageUrl sont obligatoires");
@@ -98,5 +100,6 @@ const deleteProduitPhotoByUrl = async (produitId, imageUrl) => {
 
 module.exports = {
 	createProduit,
+	updateProduit,
 	deleteProduitPhotoByUrl
 };
