@@ -1,17 +1,14 @@
 const Produit = require("../models/produit");
+const produitService = require("../services/produit.service");
 
 // CREATE
 exports.save = async (req, res) => {
     try {
-        const { nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin } = req.body;
-        const existing = await Produit.findOne({ nomProduit });
-        if (existing) {
-            return res.status(400).json({ message: "Produit déjà existant" });
-        }
-        const produit = await Produit.create({ nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin });
+        const produit = await produitService.createProduit(req.body, req.files || []);
         res.status(201).json({ message: "Produit créé", produit });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        const status = error.message === "Produit déjà existant" || error.message.includes("obligatoires") ? 400 : 500;
+        res.status(status).json({ message: error.message });
     }
 };
 
@@ -21,9 +18,10 @@ exports.getAll = async (req, res) => {
         const produits = await Produit.find().populate("unite typeProduit magasin");
         res.status(200).json(produits);
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: error.message });
     }
-};
+}; 
 
 // READ ONE
 exports.getById = async (req, res) => {
@@ -43,18 +41,30 @@ exports.getById = async (req, res) => {
 exports.update = async (req, res) => {
     try {
         const { id } = req.params;
-        const { nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin } = req.body;
-        const updated = await Produit.findByIdAndUpdate(
-            id,
-            { nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin },
-            { new: true, runValidators: true }
-        );
-        if (!updated) {
-            return res.status(404).json({ message: "Produit non trouvé" });
-        }
-        res.status(200).json({ message: "Produit mis à jour", produit: updated });
+        const produit = await produitService.updateProduit(id, req.body, req.files || []);
+        res.status(200).json({ message: "Produit mis à jour", produit });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        const status = error.message === "Produit non trouvé" ? 404 : 500;
+        res.status(status).json({ message: error.message });
+    }
+};
+
+exports.removePhoto = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { imageUrl } = req.query;
+
+        const produit = await produitService.deleteProduitPhotoByUrl(id, imageUrl);
+        res.status(200).json({ message: "Photo supprimée", produit });
+    } catch (error) {
+        const status =
+            error.message === "produitId et imageUrl sont obligatoires" ||
+            error.message === "Photo non trouvée pour ce produit"
+                ? 400
+                : error.message === "Produit non trouvé"
+                    ? 404
+                    : 500;
+        res.status(status).json({ message: error.message });
     }
 };
 

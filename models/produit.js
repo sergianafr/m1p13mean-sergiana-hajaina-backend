@@ -12,17 +12,17 @@ const ProduitSchema = new mongoose.Schema(
         photos: [{url: String, dateAjout: Date}],
         unite: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Unites",
+            ref: "Unite",
             required: true
         },
         typeProduit: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "TypeProduits",
+            ref: "TypeProduit",
             required: true
         },
         magasin: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Magasins",
+            ref: "Magasin",
             required: true
         }
     },
