@@ -19,6 +19,11 @@ const Vente = new mongoose.Schema(
             type: Date,
             default: new Date()
         },
+        pourcentagePromotion:
+        {
+            type: Number,
+            default: 0
+        },
         totalPrix: {type: Number}
     },
     { timestamps: true }

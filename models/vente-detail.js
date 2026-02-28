@@ -10,6 +10,11 @@ const VenteDetail = new mongoose.Schema(
             type: Number,
             default: 0
         },
+        pourcentagePromotion:
+        {
+            type: Number,
+            default: 0
+        },
         prixTotal: {
             type: Date
         },
