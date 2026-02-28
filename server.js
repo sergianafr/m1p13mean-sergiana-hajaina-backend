@@ -31,6 +31,7 @@ app.use("/api/favoris", require("./routes/favoris.route"));
 app.use("/api/paniers", require("./routes/panier.route"));
 app.use("/api/ventes", require("./routes/vente.route"));
 app.use("/api/mvt-stocks", require("./routes/mvt-stock.route"));
+app.use("/api/prix-produits", require("./routes/prix-produit.route"));
 
 
 connectDB();

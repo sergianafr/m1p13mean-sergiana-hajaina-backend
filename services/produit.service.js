@@ -1,4 +1,5 @@
 const Produit = require("../models/produit");
+const PrixProduit = require("../models/prix-produit");
 const cloudinary = require("cloudinary").v2;
 const { deleteImageFromCloudinaryByUrl, uploadSingleFileToCloudinary } = require("./cloudinary.service");
 
@@ -19,7 +20,8 @@ const createProduit = async (dto, files = []) => {
 		seuilNotification,
 		unite,
 		typeProduit,
-		magasin
+		magasin,
+		prixUnitaire
 	} = dto;
 
 	if (!nomProduit || !unite || !typeProduit || !magasin) {
@@ -42,6 +44,16 @@ const createProduit = async (dto, files = []) => {
 		magasin,
 		photos
 	});
+
+	// Créer le prix initial si fourni
+	if (prixUnitaire && parseFloat(prixUnitaire) > 0) {
+		await PrixProduit.create({
+			prixUnitaire: parseFloat(prixUnitaire),
+			dateDebut: new Date(),
+			dateFin: null,
+			produit: produit._id
+		});
+	}
 
 	return produit;
 };
