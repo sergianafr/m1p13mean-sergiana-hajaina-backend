@@ -25,6 +25,20 @@ exports.getAll = async (req, res) => {
     }
 };
 
+exports.getMine = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: "Utilisateur non authentifié" });
+        }
+
+        const magasins = await Magasin.find({ appUser: userId }).populate("appUser typeMagasin");
+        res.status(200).json(magasins);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // READ ONE
 exports.getById = async (req, res) => {
     try {

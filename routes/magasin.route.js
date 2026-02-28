@@ -1,12 +1,16 @@
 const express = require("express");
 const router = express.Router();
 const magasinController = require("../controllers/magasin.controller");
+const authMiddleware = require("../middlewares/auth.middleware");
 
 // CREATE
 router.post("/", magasinController.save);
 
 // READ ALL
 router.get("/", magasinController.getAll);
+
+// READ MINE (authenticated)
+router.get("/mine", authMiddleware, magasinController.getMine);
 
 // READ ONE
 router.get("/:id", magasinController.getById);
