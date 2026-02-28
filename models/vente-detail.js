@@ -1,21 +1,21 @@
 const mongoose = require("mongoose");
 
-const MvtStock = new mongoose.Schema(
+const VenteDetail = new mongoose.Schema(
     {
-        qteEntree: {
+        qte: {
             type: Number,
             default: 0
         },
-        qteSortie: {
+        prixUnitaire: {
             type: Number,
             default: 0
         },
-        dateMvtStock: {
+        prixTotal: {
             type: Date
         },
-        unite: {
+        vente: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Unite",
+            ref: "Vente",
             required: true
         },
         produit: {
@@ -27,4 +27,4 @@ const MvtStock = new mongoose.Schema(
     { timestamps: true }
 );
 
-module.exports = mongoose.model("MvtStock", MvtStock);
+module.exports = mongoose.model("VenteDetail", VenteDetail);
