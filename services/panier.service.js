@@ -1,10 +1,20 @@
 const Panier = require("../models/panier");
+const PrixProduit = require("../models/prix-produit");
 
 const getPanierByUser = async (appUser) => {
 	if (!appUser) throw new Error("appUser est obligatoire");
-	return await Panier.find({ appUser })
+	const items = await Panier.find({ appUser })
 		.populate({ path: "produit", populate: [{ path: "unite" }, { path: "typeProduit" }, { path: "magasin" }] })
 		.sort({ createdAt: -1 });
+	const produitIds = items.map(i => i.produit?._id).filter(Boolean);
+	const prixList = await PrixProduit.find({ produit: { $in: produitIds }, dateFin: null });
+	const prixMap = {};
+	prixList.forEach(px => { prixMap[String(px.produit)] = px.prixUnitaire; });
+	return items.map(item => {
+		const plain = item.toObject();
+		if (plain.produit) plain.produit.prixActuel = prixMap[String(plain.produit._id)] ?? null;
+		return plain;
+	});
 };
 
 const ajouterPanier = async (dto = {}) => {

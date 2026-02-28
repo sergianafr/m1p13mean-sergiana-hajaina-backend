@@ -1,4 +1,5 @@
 const Produit = require("../models/produit");
+const PrixProduit = require("../models/prix-produit");
 const produitService = require("../services/produit.service");
 
 // CREATE
@@ -16,7 +17,12 @@ exports.save = async (req, res) => {
 exports.getAll = async (req, res) => {
     try {
         const produits = await Produit.find().populate("unite typeProduit magasin");
-        res.status(200).json(produits);
+        const produitIds = produits.map(p => p._id);
+        const prixList = await PrixProduit.find({ produit: { $in: produitIds }, dateFin: null });
+        const prixMap = {};
+        prixList.forEach(px => { prixMap[String(px.produit)] = px.prixUnitaire; });
+        const result = produits.map(p => ({ ...p.toObject(), prixActuel: prixMap[String(p._id)] ?? null }));
+        res.status(200).json(result);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: error.message });
@@ -31,7 +37,8 @@ exports.getById = async (req, res) => {
         if (!produit) {
             return res.status(404).json({ message: "Produit non trouvé" });
         }
-        res.status(200).json(produit);
+        const prix = await PrixProduit.findOne({ produit: id, dateFin: null }).sort({ dateDebut: -1 });
+        res.status(200).json({ ...produit.toObject(), prixActuel: prix?.prixUnitaire ?? null });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
