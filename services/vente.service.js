@@ -8,7 +8,7 @@ const MvtStock = require("../models/mvt-stock");
 
 const getProduitStock = async (produitId, uniteId, session) => {
 	const result = await MvtStock.aggregate([
-		{ $match: { Produit: new mongoose.Types.ObjectId(produitId), unite: new mongoose.Types.ObjectId(uniteId) } },
+		{ $match: { produit: new mongoose.Types.ObjectId(produitId), unite: new mongoose.Types.ObjectId(uniteId) } },
 		{
 			$group: {
 				_id: null,
