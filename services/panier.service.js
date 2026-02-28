@@ -50,8 +50,37 @@ const supprimerPanier = async (dto = {}) => {
 	return deleted;
 };
 
+const modifierQtePanier = async (dto = {}) => {
+	const { produit, appUser, qte } = dto;
+
+	if (!produit || !appUser) {
+		throw new Error("produit et appUser sont obligatoires");
+	}
+
+	const quantite = Number(qte) || 1;
+	if (quantite <= 0) {
+		throw new Error("qte doit etre superieur a 0");
+	}
+
+	const existing = await Panier.findOne({ produit, appUser });
+	if (!existing) {
+		throw new Error("Panier non trouve");
+	}
+
+	existing.qte = quantite;
+	await existing.save();
+	return existing;
+};
+
+const viderPanierByUser = async (appUser) => {
+	if (!appUser) throw new Error("appUser est obligatoire");
+	return await Panier.deleteMany({ appUser });
+};
+
 module.exports = {
 	getPanierByUser,
 	ajouterPanier,
-	supprimerPanier
+	supprimerPanier,
+	modifierQtePanier,
+	viderPanierByUser
 };

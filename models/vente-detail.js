@@ -16,7 +16,8 @@ const VenteDetail = new mongoose.Schema(
             default: 0
         },
         prixTotal: {
-            type: Date
+            type: Number,
+            default: 0
         },
         vente: {
             type: mongoose.Schema.Types.ObjectId,

@@ -8,7 +8,13 @@ router.get("/user/:userId", panierController.getByUser);
 // CREATE
 router.post("/", panierController.add);
 
+// UPDATE QTE
+router.put("/", panierController.update);
+
 // DELETE
 router.delete("/", panierController.remove);
+
+// CLEAR BY USER
+router.delete("/user/:userId", panierController.clearByUser);
 
 module.exports = router;

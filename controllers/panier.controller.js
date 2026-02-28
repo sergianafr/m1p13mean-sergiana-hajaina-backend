@@ -35,3 +35,27 @@ exports.remove = async (req, res) => {
 		res.status(status).json({ message: error.message });
 	}
 };
+
+exports.update = async (req, res) => {
+	try {
+		const panier = await panierService.modifierQtePanier(req.body);
+		res.status(200).json({ message: "Quantite modifiee", panier });
+	} catch (error) {
+		const status = error.message.includes("obligatoires") || error.message.includes("superieur")
+			? 400
+			: error.message === "Panier non trouve"
+				? 404
+				: 500;
+		res.status(status).json({ message: error.message });
+	}
+};
+
+exports.clearByUser = async (req, res) => {
+	try {
+		const { userId } = req.params;
+		await panierService.viderPanierByUser(userId);
+		res.status(200).json({ message: "Panier vide" });
+	} catch (error) {
+		res.status(500).json({ message: error.message });
+	}
+};

@@ -299,7 +299,34 @@ const createAchat = async (details = [], appUser) => {
 		return ventes;
 	}
 
+const getVentesByUser = async (appUser) => {
+	if (!appUser) throw new Error("appUser est obligatoire");
+
+	const ventes = await Vente.find({ appUser })
+		.populate("magasin")
+		.sort({ createdAt: -1 })
+		.lean();
+
+	const venteIds = ventes.map(v => v._id);
+	const details = await VenteDetail.find({ vente: { $in: venteIds } })
+		.populate({ path: "produit", populate: [{ path: "unite" }, { path: "typeProduit" }, { path: "magasin" }] })
+		.lean();
+
+	const detailsByVente = {};
+	for (const d of details) {
+		const vid = String(d.vente);
+		if (!detailsByVente[vid]) detailsByVente[vid] = [];
+		detailsByVente[vid].push(d);
+	}
+
+	return ventes.map(v => ({
+		...v,
+		details: detailsByVente[String(v._id)] || []
+	}));
+};
+
 module.exports = {
 	createVente,
-	createAchat
+	createAchat,
+	getVentesByUser
 };
