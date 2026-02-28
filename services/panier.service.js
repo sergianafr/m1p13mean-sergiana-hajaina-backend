@@ -1,5 +1,12 @@
 const Panier = require("../models/panier");
 
+const getPanierByUser = async (appUser) => {
+	if (!appUser) throw new Error("appUser est obligatoire");
+	return await Panier.find({ appUser })
+		.populate({ path: "produit", populate: [{ path: "unite" }, { path: "typeProduit" }, { path: "magasin" }] })
+		.sort({ createdAt: -1 });
+};
+
 const ajouterPanier = async (dto = {}) => {
 	const { produit, appUser, qte = 1 } = dto;
 
@@ -44,6 +51,7 @@ const supprimerPanier = async (dto = {}) => {
 };
 
 module.exports = {
+	getPanierByUser,
 	ajouterPanier,
 	supprimerPanier
 };

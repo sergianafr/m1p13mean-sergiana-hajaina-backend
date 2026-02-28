@@ -1,5 +1,12 @@
 const Favoris = require("../models/favoris");
 
+const getFavorisByUser = async (appUser) => {
+    if (!appUser) throw new Error("appUser est obligatoire");
+    return await Favoris.find({ appUser })
+        .populate({ path: "produit", populate: [{ path: "unite" }, { path: "typeProduit" }, { path: "magasin" }] })
+        .sort({ dateAjout: -1 });
+};
+
 const ajouterFavori = async (dto = {}) => {
     const { produit, appUser } = dto;
 
@@ -37,6 +44,7 @@ const supprimerFavori = async (dto = {}) => {
 };
 
 module.exports = {
+    getFavorisByUser,
     ajouterFavori,
     supprimerFavori
 };

@@ -1,5 +1,15 @@
 const favorisService = require("../services/favoris.service");
 
+exports.getByUser = async (req, res) => {
+	try {
+		const { userId } = req.params;
+		const favoris = await favorisService.getFavorisByUser(userId);
+		res.status(200).json(favoris);
+	} catch (error) {
+		res.status(500).json({ message: error.message });
+	}
+};
+
 exports.add = async (req, res) => {
 	try {
 		const favoris = await favorisService.ajouterFavori(req.body);

@@ -1,5 +1,15 @@
 const panierService = require("../services/panier.service");
 
+exports.getByUser = async (req, res) => {
+	try {
+		const { userId } = req.params;
+		const paniers = await panierService.getPanierByUser(userId);
+		res.status(200).json(paniers);
+	} catch (error) {
+		res.status(500).json({ message: error.message });
+	}
+};
+
 exports.add = async (req, res) => {
 	try {
 		const panier = await panierService.ajouterPanier(req.body);
