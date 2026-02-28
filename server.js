@@ -28,6 +28,7 @@ app.use("/api/users", require("./routes/user.route"));
 app.use("/api/produits", require("./routes/produit.route"));
 app.use("/api/magasin-boxs", require("./routes/magasin-box.route"));
 app.use("/api/favoris", require("./routes/favoris.route"));
+app.use("/api/paniers", require("./routes/panier.route"));
 
 
 connectDB();
