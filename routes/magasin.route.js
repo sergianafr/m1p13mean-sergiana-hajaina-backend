@@ -2,9 +2,10 @@ const express = require("express");
 const router = express.Router();
 const magasinController = require("../controllers/magasin.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
+const roleMiddleware = require("../middlewares/role.middleware");
 
 // CREATE
-router.post("/", magasinController.save);
+router.post("/", authMiddleware, roleMiddleware("ADMIN"), magasinController.save);
 
 // READ ALL
 router.get("/", magasinController.getAll);
