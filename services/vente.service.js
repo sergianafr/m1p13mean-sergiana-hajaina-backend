@@ -180,7 +180,7 @@ const createVente = async (dto = {}) => {
 							qteSortie: Number(qte),
 							dateMvtStock: venteDate,
 							unite: produitDoc.unite,
-							Produit: produit
+							produit
 						}
 					],
 					{ session }
