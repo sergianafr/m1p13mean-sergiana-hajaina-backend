@@ -237,6 +237,69 @@ const createVente = async (dto = {}) => {
 	}
 };
 
+const createAchat = async (details = [], appUser) => {
+		if (!appUser) {
+			throw new Error("appUser est obligatoire");
+		}
+
+		if (!Array.isArray(details) || details.length === 0) {
+			throw new Error("details est obligatoire");
+		}
+
+		const produitIds = details.map((detail) => detail?.produit).filter(Boolean);
+		if (produitIds.length !== details.length) {
+			throw new Error("produit est obligatoire pour chaque detail");
+		}
+
+		const produits = await Produit.find({ _id: { $in: produitIds } })
+			.select("magasin")
+			.lean();
+
+		if (produits.length !== produitIds.length) {
+			throw new Error("Produit non trouve");
+		}
+
+		const produitToMagasin = new Map();
+		for (const produit of produits) {
+			produitToMagasin.set(String(produit._id), String(produit.magasin));
+		}
+
+		const grouped = new Map();
+		for (const detail of details) {
+			const { produit, qte } = detail || {};
+
+			if (!produit || !qte || Number(qte) <= 0) {
+				throw new Error("produit et qte sont obligatoires pour chaque detail");
+			}
+
+			const magasinId = produitToMagasin.get(String(produit));
+			if (!magasinId) {
+				throw new Error("Produit non trouve");
+			}
+
+			if (!grouped.has(magasinId)) {
+				grouped.set(magasinId, []);
+			}
+
+			grouped.get(magasinId).push({ produit, qte: Number(qte) });
+		}
+
+		const ventes = [];
+		for (const [magasinId, detailsMagasin] of grouped.entries()) {
+			const venteResult = await createVente({
+				magasin: magasinId,
+				appUser,
+				dateVente: new Date(),
+				details: detailsMagasin
+			});
+
+			ventes.push(venteResult);
+		}
+
+		return ventes;
+	}
+
 module.exports = {
-	createVente
+	createVente,
+	createAchat
 };
