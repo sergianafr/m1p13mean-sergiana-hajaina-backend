@@ -1,33 +1,34 @@
 const Favoris = require("../models/favoris");
 
-const ajouterFavori = async (produit, user) => {
+const ajouterFavori = async (dto = {}) => {
+    const { produit, appUser } = dto;
 
-    if (!produit || !user) {
-        throw new Error("produit et user sont obligatoires");
+    if (!produit || !appUser) {
+        throw new Error("produit et appUser sont obligatoires");
     }
 
-    const existing = await Favoris.findOne({ produit, user }).lean();
+    const existing = await Favoris.findOne({ produit, appUser }).lean();
     if (existing) {
         throw new Error("Favori deja existant");
     }
 
     const favoris = await Favoris.create({
         produit,
-        user,
+        appUser,
         dateAjout: new Date()
     });
 
     return favoris;
 };
 
-const supprimerFavori = async (produit, user) => {
-    
+const supprimerFavori = async (dto = {}) => {
+    const { produit, appUser } = dto;
 
-    if (!produit || !user) {
-        throw new Error("produit et user sont obligatoires");
+    if (!produit || !appUser) {
+        throw new Error("produit et appUser sont obligatoires");
     }
 
-    const deleted = await Favoris.findOneAndDelete({ produit, user });
+    const deleted = await Favoris.findOneAndDelete({ produit, appUser });
     if (!deleted) {
         throw new Error("Favori non trouve");
     }
