@@ -1,6 +1,7 @@
 const Panier = require("../models/panier");
 const PrixProduit = require("../models/prix-produit");
 const Promotion = require("../models/promotion");
+const { buildActivePromotionFilters, toPromotionInfo, pickBestPromotion } = require("./promotion.helper");
 
 const getPanierByUser = async (appUser) => {
 	if (!appUser) throw new Error("appUser est obligatoire");
@@ -8,40 +9,65 @@ const getPanierByUser = async (appUser) => {
 		.populate({ path: "produit", populate: [{ path: "unite" }, { path: "typeProduit" }, { path: "magasin" }] })
 		.sort({ createdAt: -1 });
 	const produitIds = items.map(i => i.produit?._id).filter(Boolean);
+	const magasinIds = [...new Set(
+		items
+			.map(i => i?.produit?.magasin?._id || i?.produit?.magasin)
+			.filter(Boolean)
+			.map(id => String(id))
+	)];
 	const prixList = await PrixProduit.find({ produit: { $in: produitIds }, dateFin: null });
 	const prixMap = {};
 	prixList.forEach(px => { prixMap[String(px.produit)] = px.prixUnitaire; });
 	
-	// Récupérer les promotions actives
+	// Récupérer les promotions actives (sur produit et sur magasin)
 	const now = new Date();
-	const promotions = await Promotion.find({
-		produit: { $in: produitIds },
-		dateDebut: { $lte: now },
-		dateFin: { $gte: now },
-		$or: [
-			{ qte: { $gt: 0 } },
-			{ qte: -1 }
-		]
-	}).lean();
+	const activeFilters = buildActivePromotionFilters(now);
 
-	const promotionMap = {};
-	promotions.forEach((promo) => {
-		if (promo.produit) {
-			promotionMap[String(promo.produit)] = {
-				_id: promo._id,
-				pourcentage: promo.pourcentage,
-				dateDebut: promo.dateDebut,
-				dateFin: promo.dateFin,
-				qte: promo.qte
-			};
-		}
-	});
+	const [promotionsProduit, promotionsMagasin] = await Promise.all([
+		Promotion.find({
+			...activeFilters,
+			produit: { $in: produitIds }
+		}).lean(),
+		magasinIds.length
+			? Promotion.find({
+				...activeFilters,
+				magasin: { $in: magasinIds },
+				$or: [{ produit: { $exists: false } }, { produit: null }]
+			}).lean()
+			: []
+	]);
+
+	const bestPromoByProduitId = {};
+	for (const promo of promotionsProduit) {
+		if (!promo?.produit) continue;
+		const produitId = String(promo.produit);
+		bestPromoByProduitId[produitId] = pickBestPromotion(
+			bestPromoByProduitId[produitId] || null,
+			toPromotionInfo(promo)
+		);
+	}
+
+	const bestPromoByMagasinId = {};
+	for (const promo of promotionsMagasin) {
+		if (!promo?.magasin) continue;
+		const magasinId = String(promo.magasin);
+		bestPromoByMagasinId[magasinId] = pickBestPromotion(
+			bestPromoByMagasinId[magasinId] || null,
+			toPromotionInfo(promo)
+		);
+	}
 
 	return items.map(item => {
 		const plain = item.toObject();
 		if (plain.produit) {
 			const prixActuel = prixMap[String(plain.produit._id)] ?? null;
-			const promotion = promotionMap[String(plain.produit._id)] || null;
+			const produitId = String(plain.produit._id);
+			const magasinId = plain?.produit?.magasin?._id
+				? String(plain.produit.magasin._id)
+				: (plain?.produit?.magasin ? String(plain.produit.magasin) : null);
+			const promoProduit = bestPromoByProduitId[produitId] || null;
+			const promoMagasin = magasinId ? (bestPromoByMagasinId[magasinId] || null) : null;
+			const promotion = pickBestPromotion(promoProduit, promoMagasin);
 			let prixPromo = null;
 
 			if (promotion && prixActuel) {

@@ -4,6 +4,7 @@ const AvisProduit = require("../models/avis-produit");
 const Promotion = require("../models/promotion");
 const cloudinary = require("cloudinary").v2;
 const { deleteImageFromCloudinaryByUrl, uploadSingleFileToCloudinary } = require("./cloudinary.service");
+const { buildActivePromotionFilters, toPromotionInfo, pickBestPromotion } = require("./promotion.helper");
 
 cloudinary.config({ secure: true });
 
@@ -115,6 +116,12 @@ const deleteProduitPhotoByUrl = async (produitId, imageUrl) => {
 const getAllProduitsWithRatings = async () => {
 	const produits = await Produit.find().populate("unite typeProduit magasin").lean();
 	const produitIds = produits.map((p) => p._id);
+	const magasinIds = [...new Set(
+		produits
+			.map((p) => p?.magasin?._id || p?.magasin)
+			.filter(Boolean)
+			.map((id) => String(id))
+	)];
 
 	// Récupérer tous les avis pour ces produits
 	const avis = await AvisProduit.find({ produit: { $in: produitIds } }).lean();
@@ -138,34 +145,51 @@ const getAllProduitsWithRatings = async () => {
 		prixMap[String(px.produit)] = px.prixUnitaire;
 	});
 
-	// Récupérer les promotions actives
+	// Récupérer les promotions actives (sur produit et sur magasin)
 	const now = new Date();
-	const promotions = await Promotion.find({
-		produit: { $in: produitIds },
-		dateDebut: { $lte: now },
-		dateFin: { $gte: now },
-		$or: [
-			{ qte: { $gt: 0 } },
-			{ qte: -1 }
-		]
-	}).lean();
+	const activeFilters = buildActivePromotionFilters(now);
 
-	const promotionMap = {};
-	promotions.forEach((promo) => {
-		if (promo.produit) {
-			promotionMap[String(promo.produit)] = {
-				_id: promo._id,
-				pourcentage: promo.pourcentage,
-				dateDebut: promo.dateDebut,
-				dateFin: promo.dateFin,
-				qte: promo.qte
-			};
-		}
-	});
+	const [promotionsProduit, promotionsMagasin] = await Promise.all([
+		Promotion.find({
+			...activeFilters,
+			produit: { $in: produitIds }
+		}).lean(),
+		magasinIds.length
+			? Promotion.find({
+				...activeFilters,
+				magasin: { $in: magasinIds },
+				$or: [{ produit: { $exists: false } }, { produit: null }]
+			}).lean()
+			: []
+	]);
+
+	const bestPromoByProduitId = {};
+	for (const promo of promotionsProduit) {
+		if (!promo?.produit) continue;
+		const produitId = String(promo.produit);
+		bestPromoByProduitId[produitId] = pickBestPromotion(
+			bestPromoByProduitId[produitId] || null,
+			toPromotionInfo(promo)
+		);
+	}
+
+	const bestPromoByMagasinId = {};
+	for (const promo of promotionsMagasin) {
+		if (!promo?.magasin) continue;
+		const magasinId = String(promo.magasin);
+		bestPromoByMagasinId[magasinId] = pickBestPromotion(
+			bestPromoByMagasinId[magasinId] || null,
+			toPromotionInfo(promo)
+		);
+	}
 
 	return produits.map((p) => {
 		const prixActuel = prixMap[String(p._id)] ?? null;
-		const promotion = promotionMap[String(p._id)] || null;
+		const produitId = String(p._id);
+		const magasinId = p?.magasin?._id ? String(p.magasin._id) : (p?.magasin ? String(p.magasin) : null);
+		const promoProduit = bestPromoByProduitId[produitId] || null;
+		const promoMagasin = magasinId ? (bestPromoByMagasinId[magasinId] || null) : null;
+		const promotion = pickBestPromotion(promoProduit, promoMagasin);
 		let prixPromo = null;
 
 		if (promotion && prixActuel) {
@@ -205,31 +229,35 @@ const getProduitByIdWithRating = async (produitId) => {
 		.sort({ dateDebut: -1 })
 		.lean();
 
-	// Récupérer la promotion active
+	// Récupérer la promotion active (max entre promo produit et promo magasin)
 	const now = new Date();
-	const promotion = await Promotion.findOne({
-		produit: produitId,
-		dateDebut: { $lte: now },
-		dateFin: { $gte: now },
-		$or: [
-			{ qte: { $gt: 0 } },
-			{ qte: -1 }
-		]
-	}).lean();
+	const activeFilters = buildActivePromotionFilters(now);
+
+	const [promotionProduit, promotionMagasin] = await Promise.all([
+		Promotion.findOne({
+			...activeFilters,
+			produit: produitId
+		})
+			.sort({ pourcentage: -1, dateDebut: -1 })
+			.lean(),
+		produit?.magasin?._id
+			? Promotion.findOne({
+				...activeFilters,
+				magasin: produit.magasin._id,
+				$or: [{ produit: { $exists: false } }, { produit: null }]
+			})
+				.sort({ pourcentage: -1, dateDebut: -1 })
+				.lean()
+			: null
+	]);
+
+	const promotion = pickBestPromotion(toPromotionInfo(promotionProduit), toPromotionInfo(promotionMagasin));
 
 	const prixActuel = prix?.prixUnitaire ?? null;
 	let prixPromo = null;
-	let promotionData = null;
 
 	if (promotion && prixActuel) {
-		prixPromo = prixActuel * (1 - promotion.pourcentage / 100);
-		promotionData = {
-			_id: promotion._id,
-			pourcentage: promotion.pourcentage,
-			dateDebut: promotion.dateDebut,
-			dateFin: promotion.dateFin,
-			qte: promotion.qte
-		};
+		prixPromo = prixActuel * (1 - Number(promotion.pourcentage || 0) / 100);
 	}
 
 	return {
@@ -237,7 +265,7 @@ const getProduitByIdWithRating = async (produitId) => {
 		averageRating,
 		totalReviews,
 		prixActuel: prixActuel,
-		promotion: promotionData,
+		promotion: promotion,
 		prixPromo: prixPromo
 	};
 };
