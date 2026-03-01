@@ -8,8 +8,17 @@ const upload = multer({ storage: multer.memoryStorage() });
 // CREATE
 router.post("/", upload.array("photos"), produitController.save);
 
+// READ ALL WITH RATINGS
+router.get("/with-ratings", produitController.getAllWithRatings);
+
 // READ ALL
 router.get("/", produitController.getAll);
+
+// GET REVIEWS BY PRODUIT ID
+router.get("/:id/avis", produitController.getReviews);
+
+// GET BY ID WITH RATING
+router.get("/:id/with-rating", produitController.getByIdWithRating);
 
 // READ ONE
 router.get("/:id", produitController.getById);

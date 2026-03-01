@@ -1,5 +1,6 @@
 const Produit = require("../models/produit");
 const PrixProduit = require("../models/prix-produit");
+const AvisProduit = require("../models/avis-produit");
 const cloudinary = require("cloudinary").v2;
 const { deleteImageFromCloudinaryByUrl, uploadSingleFileToCloudinary } = require("./cloudinary.service");
 
@@ -109,9 +110,91 @@ const deleteProduitPhotoByUrl = async (produitId, imageUrl) => {
 	return produit;
 };
 
+// Calculer la moyenne des notes pour tous les produits
+const getAllProduitsWithRatings = async () => {
+	const produits = await Produit.find().populate("unite typeProduit magasin").lean();
+	const produitIds = produits.map((p) => p._id);
+
+	// Récupérer tous les avis pour ces produits
+	const avis = await AvisProduit.find({ produit: { $in: produitIds } }).lean();
+
+	// Calculer les moyennes
+	const ratingsMap = {};
+	produitIds.forEach((id) => {
+		const avisProduit = avis.filter((a) => String(a.produit) === String(id));
+		const totalReviews = avisProduit.length;
+		const averageRating =
+			totalReviews > 0
+				? avisProduit.reduce((sum, a) => sum + a.nombreEtoile, 0) / totalReviews
+				: 0;
+		ratingsMap[String(id)] = { averageRating, totalReviews };
+	});
+
+	// Récupérer les prix actuels
+	const prixList = await PrixProduit.find({ produit: { $in: produitIds }, dateFin: null }).lean();
+	const prixMap = {};
+	prixList.forEach((px) => {
+		prixMap[String(px.produit)] = px.prixUnitaire;
+	});
+
+	return produits.map((p) => ({
+		...p,
+		averageRating: ratingsMap[String(p._id)]?.averageRating || 0,
+		totalReviews: ratingsMap[String(p._id)]?.totalReviews || 0,
+		prixActuel: prixMap[String(p._id)] ?? null
+	}));
+};
+
+// Récupérer un produit avec sa note moyenne
+const getProduitByIdWithRating = async (produitId) => {
+	if (!produitId) {
+		throw new Error("produitId est obligatoire");
+	}
+
+	const produit = await Produit.findById(produitId).populate("unite typeProduit magasin").lean();
+	if (!produit) {
+		throw new Error("Produit non trouvé");
+	}
+
+	const avis = await AvisProduit.find({ produit: produitId }).lean();
+	const totalReviews = avis.length;
+	const averageRating =
+		totalReviews > 0
+			? avis.reduce((sum, a) => sum + a.nombreEtoile, 0) / totalReviews
+			: 0;
+
+	const prix = await PrixProduit.findOne({ produit: produitId, dateFin: null })
+		.sort({ dateDebut: -1 })
+		.lean();
+
+	return {
+		...produit,
+		averageRating,
+		totalReviews,
+		prixActuel: prix?.prixUnitaire ?? null
+	};
+};
+
+// Récupérer tous les avis d'un produit avec les informations des utilisateurs
+const getReviewsByProduitId = async (produitId) => {
+	if (!produitId) {
+		throw new Error("produitId est obligatoire");
+	}
+
+	const avis = await AvisProduit.find({ produit: produitId })
+		.populate("appUser", "name")
+		.sort({ dateAjout: -1 })
+		.lean();
+
+	return avis;
+};
+
 
 module.exports = {
 	createProduit,
 	updateProduit,
-	deleteProduitPhotoByUrl
+	deleteProduitPhotoByUrl,
+	getAllProduitsWithRatings,
+	getProduitByIdWithRating,
+	getReviewsByProduitId
 };

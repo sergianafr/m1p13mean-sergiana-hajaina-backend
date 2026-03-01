@@ -88,3 +88,37 @@ exports.remove = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// GET ALL WITH RATINGS
+exports.getAllWithRatings = async (req, res) => {
+    try {
+        const produits = await produitService.getAllProduitsWithRatings();
+        res.status(200).json(produits);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// GET BY ID WITH RATING
+exports.getByIdWithRating = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const produit = await produitService.getProduitByIdWithRating(id);
+        res.status(200).json(produit);
+    } catch (error) {
+        const status = error.message === "Produit non trouvé" ? 404 : 500;
+        res.status(status).json({ message: error.message });
+    }
+};
+
+// GET REVIEWS BY PRODUIT ID
+exports.getReviews = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const avis = await produitService.getReviewsByProduitId(id);
+        res.status(200).json(avis);
+    } catch (error) {
+        const status = error.message.includes("obligatoire") ? 400 : 500;
+        res.status(status).json({ message: error.message });
+    }
+};
