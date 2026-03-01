@@ -27,6 +27,11 @@ app.use("/api/magasins", require("./routes/magasin.route"));
 app.use("/api/users", require("./routes/user.route"));
 app.use("/api/produits", require("./routes/produit.route"));
 app.use("/api/magasin-boxs", require("./routes/magasin-box.route"));
+app.use("/api/favoris", require("./routes/favoris.route"));
+app.use("/api/paniers", require("./routes/panier.route"));
+app.use("/api/ventes", require("./routes/vente.route"));
+app.use("/api/avis-produits", require("./routes/avis-produit.route"));
+app.use("/api/avis-magasins", require("./routes/avis-magasin.route"));
 
 
 connectDB();
