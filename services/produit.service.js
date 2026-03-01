@@ -1,6 +1,7 @@
 const Produit = require("../models/produit");
 const PrixProduit = require("../models/prix-produit");
 const AvisProduit = require("../models/avis-produit");
+const Promotion = require("../models/promotion");
 const cloudinary = require("cloudinary").v2;
 const { deleteImageFromCloudinaryByUrl, uploadSingleFileToCloudinary } = require("./cloudinary.service");
 
@@ -137,12 +138,49 @@ const getAllProduitsWithRatings = async () => {
 		prixMap[String(px.produit)] = px.prixUnitaire;
 	});
 
-	return produits.map((p) => ({
-		...p,
-		averageRating: ratingsMap[String(p._id)]?.averageRating || 0,
-		totalReviews: ratingsMap[String(p._id)]?.totalReviews || 0,
-		prixActuel: prixMap[String(p._id)] ?? null
-	}));
+	// Récupérer les promotions actives
+	const now = new Date();
+	const promotions = await Promotion.find({
+		produit: { $in: produitIds },
+		dateDebut: { $lte: now },
+		dateFin: { $gte: now },
+		$or: [
+			{ qte: { $gt: 0 } },
+			{ qte: -1 }
+		]
+	}).lean();
+
+	const promotionMap = {};
+	promotions.forEach((promo) => {
+		if (promo.produit) {
+			promotionMap[String(promo.produit)] = {
+				_id: promo._id,
+				pourcentage: promo.pourcentage,
+				dateDebut: promo.dateDebut,
+				dateFin: promo.dateFin,
+				qte: promo.qte
+			};
+		}
+	});
+
+	return produits.map((p) => {
+		const prixActuel = prixMap[String(p._id)] ?? null;
+		const promotion = promotionMap[String(p._id)] || null;
+		let prixPromo = null;
+
+		if (promotion && prixActuel) {
+			prixPromo = prixActuel * (1 - promotion.pourcentage / 100);
+		}
+
+		return {
+			...p,
+			averageRating: ratingsMap[String(p._id)]?.averageRating || 0,
+			totalReviews: ratingsMap[String(p._id)]?.totalReviews || 0,
+			prixActuel: prixActuel,
+			promotion: promotion,
+			prixPromo: prixPromo
+		};
+	});
 };
 
 // Récupérer un produit avec sa note moyenne
@@ -167,11 +205,40 @@ const getProduitByIdWithRating = async (produitId) => {
 		.sort({ dateDebut: -1 })
 		.lean();
 
+	// Récupérer la promotion active
+	const now = new Date();
+	const promotion = await Promotion.findOne({
+		produit: produitId,
+		dateDebut: { $lte: now },
+		dateFin: { $gte: now },
+		$or: [
+			{ qte: { $gt: 0 } },
+			{ qte: -1 }
+		]
+	}).lean();
+
+	const prixActuel = prix?.prixUnitaire ?? null;
+	let prixPromo = null;
+	let promotionData = null;
+
+	if (promotion && prixActuel) {
+		prixPromo = prixActuel * (1 - promotion.pourcentage / 100);
+		promotionData = {
+			_id: promotion._id,
+			pourcentage: promotion.pourcentage,
+			dateDebut: promotion.dateDebut,
+			dateFin: promotion.dateFin,
+			qte: promotion.qte
+		};
+	}
+
 	return {
 		...produit,
 		averageRating,
 		totalReviews,
-		prixActuel: prix?.prixUnitaire ?? null
+		prixActuel: prixActuel,
+		promotion: promotionData,
+		prixPromo: prixPromo
 	};
 };
 

@@ -1,5 +1,6 @@
 const Panier = require("../models/panier");
 const PrixProduit = require("../models/prix-produit");
+const Promotion = require("../models/promotion");
 
 const getPanierByUser = async (appUser) => {
 	if (!appUser) throw new Error("appUser est obligatoire");
@@ -10,9 +11,47 @@ const getPanierByUser = async (appUser) => {
 	const prixList = await PrixProduit.find({ produit: { $in: produitIds }, dateFin: null });
 	const prixMap = {};
 	prixList.forEach(px => { prixMap[String(px.produit)] = px.prixUnitaire; });
+	
+	// Récupérer les promotions actives
+	const now = new Date();
+	const promotions = await Promotion.find({
+		produit: { $in: produitIds },
+		dateDebut: { $lte: now },
+		dateFin: { $gte: now },
+		$or: [
+			{ qte: { $gt: 0 } },
+			{ qte: -1 }
+		]
+	}).lean();
+
+	const promotionMap = {};
+	promotions.forEach((promo) => {
+		if (promo.produit) {
+			promotionMap[String(promo.produit)] = {
+				_id: promo._id,
+				pourcentage: promo.pourcentage,
+				dateDebut: promo.dateDebut,
+				dateFin: promo.dateFin,
+				qte: promo.qte
+			};
+		}
+	});
+
 	return items.map(item => {
 		const plain = item.toObject();
-		if (plain.produit) plain.produit.prixActuel = prixMap[String(plain.produit._id)] ?? null;
+		if (plain.produit) {
+			const prixActuel = prixMap[String(plain.produit._id)] ?? null;
+			const promotion = promotionMap[String(plain.produit._id)] || null;
+			let prixPromo = null;
+
+			if (promotion && prixActuel) {
+				prixPromo = prixActuel * (1 - promotion.pourcentage / 100);
+			}
+
+			plain.produit.prixActuel = prixActuel;
+			plain.produit.promotion = promotion;
+			plain.produit.prixPromo = prixPromo;
+		}
 		return plain;
 	});
 };
