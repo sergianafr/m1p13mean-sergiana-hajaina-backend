@@ -32,6 +32,8 @@ app.use("/api/paniers", require("./routes/panier.route"));
 app.use("/api/ventes", require("./routes/vente.route"));
 app.use("/api/mvt-stocks", require("./routes/mvt-stock.route"));
 app.use("/api/prix-produits", require("./routes/prix-produit.route"));
+app.use("/api/avis-produits", require("./routes/avis-produit.route"));
+app.use("/api/avis-magasins", require("./routes/avis-magasin.route"));
 
 
 connectDB();
