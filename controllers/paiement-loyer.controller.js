@@ -11,7 +11,8 @@ function mapErrorToStatus(error) {
 
     if (
         error.message.includes("Aucune association active") ||
-        error.message.includes("Aucun loyer actif")
+        error.message.includes("Aucun loyer actif") ||
+        error.message.includes("box actifs n'ont pas de loyer actif")
     ) {
         return 404;
     }

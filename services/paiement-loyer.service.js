@@ -21,10 +21,10 @@ function parsePositiveInteger(value) {
 }
 
 exports.createPaiement = async (payload) => {
-    const { magasin, box, mois, annee, datePaiement, montantPaye } = payload;
+    const { magasin, mois, annee, datePaiement } = payload;
 
-    if (!magasin || !box || !mois || !annee) {
-        throw new Error("magasin, box, mois et annee sont obligatoires");
+    if (!magasin || !mois || !annee) {
+        throw new Error("magasin, mois et annee sont obligatoires");
     }
 
     if (mois < 1 || mois > 12) {
@@ -33,46 +33,64 @@ exports.createPaiement = async (payload) => {
 
     const { start, end } = getMonthBoundaries(Number(annee), Number(mois));
 
-    const associationActive = await MagasinBox.findOne({
+    const associationsActives = await MagasinBox.find({
         magasin,
-        box,
         ...buildPeriodOverlapQuery(start, end)
     }).lean();
 
-    if (!associationActive) {
-        throw new Error("Aucune association active entre ce magasin et ce box pour ce mois");
+    if (!associationsActives.length) {
+        throw new Error("Aucune association active entre ce magasin et ses box pour ce mois");
     }
 
-    const loyerActif = await LoyerBox.findOne({
-        box,
-        ...buildPeriodOverlapQuery(start, end)
-    })
-        .sort({ dateDebut: -1 })
-        .lean();
-
-    if (!loyerActif) {
-        throw new Error("Aucun loyer actif pour ce box sur la période demandée");
-    }
-
-    const alreadyPaid = await PaiementLoyer.findOne({ magasin, box, mois, annee }).lean();
+    const alreadyPaid = await PaiementLoyer.findOne({ magasin, mois, annee }).lean();
     if (alreadyPaid) {
-        throw new Error("Le loyer de ce mois est déjà payé pour ce magasin et ce box");
+        throw new Error("Le loyer de ce mois est déjà payé pour ce magasin");
     }
+
+    const uniqueBoxIds = [...new Set(associationsActives.map((association) => String(association.box)))];
+
+    const loyersParBox = await Promise.all(
+        uniqueBoxIds.map(async (boxId) => {
+            const loyerActif = await LoyerBox.findOne({
+                box: boxId,
+                ...buildPeriodOverlapQuery(start, end)
+            })
+                .sort({ dateDebut: -1 })
+                .lean();
+
+            return {
+                boxId,
+                loyerActif
+            };
+        })
+    );
+
+    const boxesSansLoyer = loyersParBox.filter((entry) => !entry.loyerActif).map((entry) => entry.boxId);
+    if (boxesSansLoyer.length) {
+        throw new Error("Certains box actifs n'ont pas de loyer actif sur la période demandée");
+    }
+
+    const details = loyersParBox.map((entry) => ({
+        box: entry.boxId,
+        loyerBox: entry.loyerActif._id,
+        montantLoyer: entry.loyerActif.montantLoyer
+    }));
+
+    const montantPaye = details.reduce((sum, item) => sum + Number(item.montantLoyer || 0), 0);
 
     const paiement = await PaiementLoyer.create({
         magasin,
-        box,
-        loyerBox: loyerActif._id,
         mois,
         annee,
         datePaiement: datePaiement || new Date(),
-        montantPaye: typeof montantPaye === "number" ? montantPaye : loyerActif.montantLoyer
+        montantPaye,
+        details
     });
 
     return PaiementLoyer.findById(paiement._id)
         .populate("magasin", "nomMagasin")
-        .populate("box", "nomBox aireBox")
-        .populate("loyerBox", "montantLoyer dateDebut dateFin")
+        .populate("details.box", "nomBox aireBox")
+        .populate("details.loyerBox", "montantLoyer dateDebut dateFin")
         .lean();
 };
 
@@ -92,15 +110,15 @@ exports.getAllPaiements = async (queryParams) => {
 
     const query = {};
     if (magasin) query.magasin = magasin;
-    if (box) query.box = box;
+    if (box) query["details.box"] = box;
     if (mois) query.mois = Number(mois);
     if (annee) query.annee = Number(annee);
 
     const [items, total] = await Promise.all([
         PaiementLoyer.find(query)
             .populate("magasin", "nomMagasin")
-            .populate("box", "nomBox aireBox")
-            .populate("loyerBox", "montantLoyer")
+            .populate("details.box", "nomBox aireBox")
+            .populate("details.loyerBox", "montantLoyer")
             .sort({ annee: -1, mois: -1, datePaiement: -1 })
             .skip(skip)
             .limit(limit)
@@ -122,8 +140,8 @@ exports.getAllPaiements = async (queryParams) => {
 exports.getPaiementById = async (id) => {
     return PaiementLoyer.findById(id)
         .populate("magasin", "nomMagasin")
-        .populate("box", "nomBox aireBox")
-        .populate("loyerBox", "montantLoyer dateDebut dateFin")
+    .populate("details.box", "nomBox aireBox")
+    .populate("details.loyerBox", "montantLoyer dateDebut dateFin")
         .lean();
 };
 
