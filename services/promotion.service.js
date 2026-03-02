@@ -7,8 +7,8 @@ const createPromotion = async (dto) => {
 		throw new Error("dateDebut et dateFin sont obligatoires");
 	}
 
-	if (new Date(dateFin) <= new Date(dateDebut)) {
-		throw new Error("La date de fin doit être postérieure à la date de début");
+	if (new Date(dateFin) < new Date(dateDebut)) {
+		throw new Error("La date de fin doit être supérieur à la date de début");
 	}
 
 	if (!produit && !magasin) {
@@ -51,8 +51,8 @@ const updatePromotion = async (id, dto) => {
 		throw new Error("Promotion non trouvée");
 	}
 
-	if (dateDebut && dateFin && new Date(dateFin) <= new Date(dateDebut)) {
-		throw new Error("La date de fin doit être postérieure à la date de début");
+	if (dateDebut && dateFin && new Date(dateFin) < new Date(dateDebut)) {
+		throw new Error("La date de fin doit être supérieur à la date de début");
 	}
 
 	if (pourcentage !== undefined && (pourcentage < 0 || pourcentage > 100)) {
