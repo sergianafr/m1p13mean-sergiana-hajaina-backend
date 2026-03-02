@@ -14,15 +14,35 @@
 - Suivi de paiement de loyer des magasin
 - Création de magasin et liste
 - Creation et liste utilisateur 
+- Liste des avis sur les produits
+- Liste des avis sur le magasins
 #### Boutique
+- Dashboard avec des données clés et alertes sur les stocks
 - Liste de type produit
 - Paiement loyer pour son magasin et liste de ses paiements
-- Suivi et gestion de stocke des produits
+- Suivi et gestion de stock des produits
 - Création produit
 - Création promotions
 - Liste des avis sur les produits
 - Liste des avis sur le magasins
-        - 
+- Création de promotion sur le magasin ou des produits
+### Front-office:
+- Fil d'actualité avec une sélection de produit choisis aléatoirement
+- Liste des produits en promo
+- Liste des produits par catégories, filtrées par prix ou avis
+- Details des produits
+- DOnner un avis a un produit et voir les avis des autres clients
+- VOir tout les magasins
+- Details magasin
+- Donner un avis et voir les avis des autres clients
+- Ajouter des produits en favoris
+- Ajouter des produit en panier
+- Validation panier
+- Liste des achats effectués
+# URL & Accès
+# Lien Git
+main: https://github.com/sergianafr/m1p13mean-sergiana-hajaina-frontend.git  
+main: https://github.com/sergianafr/m1p13mean-sergiana-hajaina-backend.git
 # Structure mongo db de l'application
 ```json
 {
