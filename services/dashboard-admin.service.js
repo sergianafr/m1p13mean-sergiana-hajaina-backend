@@ -41,7 +41,6 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 	const now = new Date();
 	const recentStart = new Date(now.getTime() - recentDays * 24 * 60 * 60 * 1000);
 
-	// Récupération des données de base
 	const [
 		magasins,
 		usersTotal,
@@ -69,13 +68,11 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 		})
 	]);
 
-	// Calcul du CA basé sur les loyers (année complète + récent)
 	const [aggLoyersYear, aggLoyersRecent, aggLoyersMonthly] = await Promise.all([
 		LoyerBox.aggregate([
 			{
 				$match: {
 					$or: [
-						// Loyers actifs pendant l'année
 						{ dateDebut: { $lt: endYear }, $or: [{ dateFin: null }, { dateFin: { $gte: startYear } }] }
 					]
 				}
@@ -216,7 +213,6 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 		])
 	]);
 
-	// Agrégations pour les avis
 	const [aggAvisByMagasin, aggAvisMonthlyByMagasin] = await Promise.all([
 		AvisMagasin.aggregate([
 			{ $match: { createdAt: { $gte: startYear, $lt: endYear } } },
@@ -243,7 +239,6 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 		])
 	]);
 
-	// Construction des maps
 	const loyersYearMap = new Map(
 		aggLoyersYear.map((item) => [String(item._id), Number(item.totalLoyer) || 0])
 	);
@@ -258,7 +253,6 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 		])
 	);
 
-	// Construction des données mensuelles
 	const monthlyRevenue = Array.from({ length: 12 }, () => 0);
 	for (const row of aggLoyersMonthly) {
 		const idx = Number(row._id);
@@ -267,7 +261,6 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 		}
 	}
 
-	// Construction des données mensuelles par magasin (avis)
 	const avisMonthlyMap = new Map();
 	for (const row of aggAvisMonthlyByMagasin) {
 		const magasinId = String(row._id.magasin);
@@ -283,7 +276,6 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 		}
 	}
 
-	// Construction des stats par magasin pour les avis
 	const magasinsStats = magasins.map((magasin) => {
 		const magasinId = String(magasin._id);
 		const avisStats = avisMap.get(magasinId) || { avisMoyen: 0, nombreAvis: 0 };
@@ -299,7 +291,6 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 		};
 	});
 
-	// Tous les magasins par avis (triés)
 	const magasinsAvis = [...magasinsStats]
 		.sort((a, b) => b.avisMoyen - a.avisMoyen || b.nombreAvis - a.nombreAvis)
 		.map((m) => ({
