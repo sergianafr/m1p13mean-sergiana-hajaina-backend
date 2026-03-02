@@ -3,6 +3,9 @@ const Vente = require("../models/vente");
 const AvisMagasin = require("../models/avis-magasin");
 const Promotion = require("../models/promotion");
 const User = require("../models/user");
+const LoyerBox = require("../models/loyer-box");
+const MagasinBox = require("../models/magasin-box");
+const Box = require("../models/box");
 
 const toInt = (value, fallback) => {
 	const n = Number(value);
@@ -28,72 +31,6 @@ const ensureDays = (days) => {
 	return d;
 };
 
-const getDashboardAdminData = async (year) => {
-	const currentYear = new Date().getFullYear();
-	const selectedYear = year ? Number(year) : currentYear;
-
-	if (!Number.isInteger(selectedYear) || selectedYear < 1900 || selectedYear > 9999) {
-		throw new Error("annee invalide");
-	}
-
-	const startDate = new Date(selectedYear, 0, 1, 0, 0, 0, 0);
-	const endDate = new Date(selectedYear + 1, 0, 1, 0, 0, 0, 0);
-
-	const [magasins, ventesByMagasin, avisByMagasin] = await Promise.all([
-		Magasin.find().select("nomMagasin").lean(),
-		Vente.aggregate([
-			{ $match: { dateVente: { $gte: startDate, $lt: endDate } } },
-			{
-				$group: {
-					_id: "$magasin",
-					nombreVentes: { $sum: 1 }
-				}
-			}
-		]),
-		AvisMagasin.aggregate([
-			{ $match: { dateAjout: { $gte: startDate, $lt: endDate } } },
-			{
-				$group: {
-					_id: "$magasin",
-					avisMoyen: { $avg: "$nombreEtoile" },
-					nombreAvis: { $sum: 1 }
-				}
-			}
-		])
-	]);
-
-	const venteMap = new Map(
-		ventesByMagasin.map((item) => [String(item._id), Number(item.nombreVentes) || 0])
-	);
-
-	const avisMap = new Map(
-		avisByMagasin.map((item) => [
-			String(item._id),
-			{
-				avisMoyen: Number(item.avisMoyen?.toFixed(2)) || 0,
-				nombreAvis: Number(item.nombreAvis) || 0
-			}
-		])
-	);
-
-	const data = magasins.map((magasin) => {
-		const statsAvis = avisMap.get(String(magasin._id)) || { avisMoyen: 0, nombreAvis: 0 };
-
-		return {
-			magasinId: magasin._id,
-			nomMagasin: magasin.nomMagasin,
-			avisMoyen: statsAvis.avisMoyen,
-			nombreAvis: statsAvis.nombreAvis,
-			nombreVentes: venteMap.get(String(magasin._id)) || 0
-		};
-	});
-
-	return {
-		annee: selectedYear,
-		data
-	};
-};
-
 const getAdminDashboard = async ({ year, days } = {}) => {
 	const selectedYear = ensureYear(year);
 	const recentDays = ensureDays(days);
@@ -104,6 +41,7 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 	const now = new Date();
 	const recentStart = new Date(now.getTime() - recentDays * 24 * 60 * 60 * 1000);
 
+	// Récupération des données de base
 	const [
 		magasins,
 		usersTotal,
@@ -112,12 +50,8 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 		usersClients,
 		promotionsActives,
 		promotionsExpirentBientot,
-		recentAgg,
-		recentClientsUniques,
-		aggYearByMagasin,
-		aggAvisByMagasin,
-		aggMonthlyRevenue,
-		aggTopMagasinsRecent
+		boxesTotal,
+		boxesOccupes
 	] = await Promise.all([
 		Magasin.find().select("nomMagasin").lean(),
 		User.countDocuments(),
@@ -128,27 +62,162 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 		Promotion.countDocuments({
 			dateFin: { $gte: now, $lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) }
 		}),
-		Vente.aggregate([
-			{ $match: { dateVente: { $gte: recentStart, $lte: now } } },
+		Box.countDocuments(),
+		MagasinBox.countDocuments({
+			dateDebut: { $lte: now },
+			$or: [{ dateFin: null }, { dateFin: { $gte: now } }]
+		})
+	]);
+
+	// Calcul du CA basé sur les loyers (année complète + récent)
+	const [aggLoyersYear, aggLoyersRecent, aggLoyersMonthly] = await Promise.all([
+		LoyerBox.aggregate([
+			{
+				$match: {
+					$or: [
+						// Loyers actifs pendant l'année
+						{ dateDebut: { $lt: endYear }, $or: [{ dateFin: null }, { dateFin: { $gte: startYear } }] }
+					]
+				}
+			},
+			{
+				$lookup: {
+					from: "magasinboxes",
+					localField: "box",
+					foreignField: "box",
+					as: "magasinBoxes"
+				}
+			},
+			{ $unwind: { path: "$magasinBoxes", preserveNullAndEmptyArrays: false } },
+			{
+				$match: {
+					"magasinBoxes.dateDebut": { $lt: endYear },
+					$or: [
+						{ "magasinBoxes.dateFin": null },
+						{ "magasinBoxes.dateFin": { $gte: startYear } }
+					]
+				}
+			},
+			{
+				$group: {
+					_id: "$magasinBoxes.magasin",
+					totalLoyer: { $sum: "$montantLoyer" }
+				}
+			}
+		]),
+		LoyerBox.aggregate([
+			{
+				$match: {
+					$or: [
+						{ dateDebut: { $lt: now }, $or: [{ dateFin: null }, { dateFin: { $gte: recentStart } }] }
+					]
+				}
+			},
+			{
+				$lookup: {
+					from: "magasinboxes",
+					localField: "box",
+					foreignField: "box",
+					as: "magasinBoxes"
+				}
+			},
+			{ $unwind: { path: "$magasinBoxes", preserveNullAndEmptyArrays: false } },
+			{
+				$match: {
+					"magasinBoxes.dateDebut": { $lt: now },
+					$or: [
+						{ "magasinBoxes.dateFin": null },
+						{ "magasinBoxes.dateFin": { $gte: recentStart } }
+					]
+				}
+			},
 			{
 				$group: {
 					_id: null,
-					nombreVentes: { $sum: 1 },
-					revenue: { $sum: { $ifNull: ["$totalPrix", 0] } }
+					totalLoyer: { $sum: "$montantLoyer" }
 				}
 			}
 		]),
-		Vente.distinct("appUser", { dateVente: { $gte: recentStart, $lte: now } }).then((ids) => ids.length),
-		Vente.aggregate([
-			{ $match: { dateVente: { $gte: startYear, $lt: endYear } } },
+		LoyerBox.aggregate([
+			{
+				$match: {
+					dateDebut: { $lt: endYear },
+					$or: [{ dateFin: null }, { dateFin: { $gte: startYear } }]
+				}
+			},
+			{
+				$lookup: {
+					from: "magasinboxes",
+					localField: "box",
+					foreignField: "box",
+					as: "magasinBoxes"
+				}
+			},
+			{ $unwind: { path: "$magasinBoxes", preserveNullAndEmptyArrays: false } },
+			{
+				$project: {
+					magasin: "$magasinBoxes.magasin",
+					montantLoyer: 1,
+					dateDebut: 1,
+					dateFin: 1,
+					months: {
+						$map: {
+							input: { $range: [0, 12] },
+							as: "monthIdx",
+							in: {
+								$let: {
+									vars: {
+										monthStart: {
+											$dateFromParts: {
+												year: selectedYear,
+												month: { $add: ["$$monthIdx", 1] },
+												day: 1
+											}
+										},
+										monthEnd: {
+											$dateFromParts: {
+												year: selectedYear,
+												month: { $add: ["$$monthIdx", 2] },
+												day: 1
+											}
+										}
+									},
+									in: {
+										$cond: {
+											if: {
+												$and: [
+													{ $lt: ["$dateDebut", "$$monthEnd"] },
+													{
+														$or: [
+															{ $eq: ["$dateFin", null] },
+															{ $gte: ["$dateFin", "$$monthStart"] }
+														]
+													}
+												]
+											},
+											then: "$montantLoyer",
+											else: 0
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			{ $unwind: { path: "$months", includeArrayIndex: "monthIdx" } },
 			{
 				$group: {
-					_id: "$magasin",
-					nombreVentes: { $sum: 1 },
-					revenue: { $sum: { $ifNull: ["$totalPrix", 0] } }
+					_id: "$monthIdx",
+					totalLoyer: { $sum: "$months" }
 				}
-			}
-		]),
+			},
+			{ $sort: { _id: 1 } }
+		])
+	]);
+
+	// Agrégations pour les avis
+	const [aggAvisByMagasin, aggAvisMonthlyByMagasin] = await Promise.all([
 		AvisMagasin.aggregate([
 			{ $match: { createdAt: { $gte: startYear, $lt: endYear } } },
 			{
@@ -159,52 +228,24 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 				}
 			}
 		]),
-		Vente.aggregate([
-			{ $match: { dateVente: { $gte: startYear, $lt: endYear } } },
+		AvisMagasin.aggregate([
+			{ $match: { createdAt: { $gte: startYear, $lt: endYear } } },
 			{
 				$group: {
-					_id: { $month: "$dateVente" },
-					revenue: { $sum: { $ifNull: ["$totalPrix", 0] } },
-					nombreVentes: { $sum: 1 }
-				}
-			},
-			{ $sort: { _id: 1 } }
-		]),
-		Vente.aggregate([
-			{ $match: { dateVente: { $gte: recentStart, $lte: now } } },
-			{
-				$group: {
-					_id: "$magasin",
-					nombreVentes: { $sum: 1 },
-					revenue: { $sum: { $ifNull: ["$totalPrix", 0] } }
-				}
-			},
-			{ $sort: { revenue: -1 } },
-			{ $limit: 5 },
-			{
-				$lookup: {
-					from: "magasins",
-					localField: "_id",
-					foreignField: "_id",
-					as: "magasinDoc"
-				}
-			},
-			{ $unwind: { path: "$magasinDoc", preserveNullAndEmptyArrays: true } },
-			{
-				$project: {
-					magasinId: "$_id",
-					nomMagasin: "$magasinDoc.nomMagasin",
-					nombreVentes: 1,
-					revenue: 1
+					_id: {
+						magasin: "$magasin",
+						month: { $month: "$createdAt" }
+					},
+					avisMoyen: { $avg: "$nombreEtoile" },
+					nombreAvis: { $sum: 1 }
 				}
 			}
 		])
 	]);
 
-	const recent = recentAgg?.[0] || { nombreVentes: 0, revenue: 0 };
-
-	const ventesMap = new Map(
-		aggYearByMagasin.map((item) => [String(item._id), { nombreVentes: item.nombreVentes, revenue: item.revenue }])
+	// Construction des maps
+	const loyersYearMap = new Map(
+		aggLoyersYear.map((item) => [String(item._id), Number(item.totalLoyer) || 0])
 	);
 
 	const avisMap = new Map(
@@ -217,29 +258,60 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 		])
 	);
 
-	const magasinsStats = magasins.map((magasin) => {
-		const venteStats = ventesMap.get(String(magasin._id)) || { nombreVentes: 0, revenue: 0 };
-		const avisStats = avisMap.get(String(magasin._id)) || { avisMoyen: 0, nombreAvis: 0 };
-		return {
-			magasinId: magasin._id,
-			nomMagasin: magasin.nomMagasin,
-			nombreVentes: Number(venteStats.nombreVentes) || 0,
-			revenue: Number(venteStats.revenue) || 0,
-			avisMoyen: avisStats.avisMoyen,
-			nombreAvis: avisStats.nombreAvis
-		};
-	});
-
-	const monthly = Array.from({ length: 12 }, () => ({ revenue: 0, nombreVentes: 0 }));
-	for (const row of aggMonthlyRevenue) {
-		const idx = Number(row._id) - 1;
+	// Construction des données mensuelles
+	const monthlyRevenue = Array.from({ length: 12 }, () => 0);
+	for (const row of aggLoyersMonthly) {
+		const idx = Number(row._id);
 		if (idx >= 0 && idx < 12) {
-			monthly[idx] = {
-				revenue: Number(row.revenue) || 0,
-				nombreVentes: Number(row.nombreVentes) || 0
+			monthlyRevenue[idx] = Number(row.totalLoyer) || 0;
+		}
+	}
+
+	// Construction des données mensuelles par magasin (avis)
+	const avisMonthlyMap = new Map();
+	for (const row of aggAvisMonthlyByMagasin) {
+		const magasinId = String(row._id.magasin);
+		const month = Number(row._id.month) - 1;
+		if (!avisMonthlyMap.has(magasinId)) {
+			avisMonthlyMap.set(magasinId, Array.from({ length: 12 }, () => ({ avisMoyen: 0, nombreAvis: 0 })));
+		}
+		if (month >= 0 && month < 12) {
+			avisMonthlyMap.get(magasinId)[month] = {
+				avisMoyen: Number((Number(row.avisMoyen) || 0).toFixed(2)),
+				nombreAvis: Number(row.nombreAvis) || 0
 			};
 		}
 	}
+
+	// Construction des stats par magasin pour les avis
+	const magasinsStats = magasins.map((magasin) => {
+		const magasinId = String(magasin._id);
+		const avisStats = avisMap.get(magasinId) || { avisMoyen: 0, nombreAvis: 0 };
+		const avisMonthly =
+			avisMonthlyMap.get(magasinId) || Array.from({ length: 12 }, () => ({ avisMoyen: 0, nombreAvis: 0 }));
+
+		return {
+			magasinId: magasin._id,
+			nomMagasin: magasin.nomMagasin,
+			avisMoyen: avisStats.avisMoyen,
+			nombreAvis: avisStats.nombreAvis,
+			avisMonthly
+		};
+	});
+
+	// Tous les magasins par avis (triés)
+	const magasinsAvis = [...magasinsStats]
+		.sort((a, b) => b.avisMoyen - a.avisMoyen || b.nombreAvis - a.nombreAvis)
+		.map((m) => ({
+			magasinId: m.magasinId,
+			nomMagasin: m.nomMagasin,
+			avisMoyen: m.avisMoyen,
+			nombreAvis: m.nombreAvis,
+			avisMonthly: m.avisMonthly
+		}));
+
+	const totalRevenueYear = monthlyRevenue.reduce((sum, val) => sum + val, 0);
+	const recentRevenue = (aggLoyersRecent?.[0]?.totalLoyer || 0) / recentDays * 30; // Normaliser sur 30j
 
 	return {
 		generatedAt: now.toISOString(),
@@ -253,28 +325,25 @@ const getAdminDashboard = async ({ year, days } = {}) => {
 				boutiques: Number(usersBoutiques) || 0,
 				clients: Number(usersClients) || 0
 			},
-			ventesRecent: {
-				nombreVentes: Number(recent.nombreVentes) || 0,
-				revenue: Number(recent.revenue) || 0,
-				clientsUniques: Number(recentClientsUniques) || 0
+			boxes: {
+				total: Number(boxesTotal) || 0,
+				occupes: Number(boxesOccupes) || 0,
+				libres: Number(boxesTotal - boxesOccupes) || 0
+			},
+			loyersRecent: {
+				revenue: Number(recentRevenue.toFixed(2)) || 0
 			},
 			promotions: {
 				actives: Number(promotionsActives) || 0,
 				expirentBientot: Number(promotionsExpirentBientot) || 0
 			}
 		},
-		monthly,
-		magasins: magasinsStats,
-		topMagasinsRecent: (aggTopMagasinsRecent || []).map((row) => ({
-			magasinId: row.magasinId,
-			nomMagasin: row.nomMagasin || "(Magasin supprimé)",
-			nombreVentes: Number(row.nombreVentes) || 0,
-			revenue: Number(row.revenue) || 0
-		}))
+		totalRevenueYear: Number(totalRevenueYear.toFixed(2)) || 0,
+		magasinsAvis
 	};
 };
 
 module.exports = {
-	getDashboardAdminData,
 	getAdminDashboard
 };
+
