@@ -163,116 +163,94 @@ const createVente = async (dto = {}) => {
 
 			let totalVente = 0;
 			const detailDocs = [];
-			const promotionsUsed = new Map();
 			const promotionVente = await findPromotionForVente({ magasinId: magasin, dateVente: venteDate }, session);
+			const magasinPourcentage = promotionVente ? toNumber(promotionVente.pourcentage) : 0;
 
+			const preparedDetails = [];
 			for (const detail of details) {
 				const { produit, qte } = detail || {};
 
 				if (!produit || !qte || Number(qte) <= 0) {
-					const detailDocs = [];
-					const promotionsUsed = new Map();
-					const promotionVente = await findPromotionForVente({ magasinId: magasin, dateVente: venteDate }, session);
-					const magasinPourcentage = promotionVente ? toNumber(promotionVente.pourcentage) : 0;
-
-					// Préparer les détails (prix, stock, promo produit) pour décider ensuite
-					const preparedDetails = [];
-					for (const detail of details) {
-						const { produit, qte } = detail || {};
-
-						if (!produit || !qte || Number(qte) <= 0) {
-							throw new Error("produit et qte sont obligatoires pour chaque detail");
-						}
-
-						const produitDoc = await Produit.findById(produit)
-							.select("unite magasin")
-							.session(session)
-							.lean();
-
-						if (!produitDoc) {
-							throw new Error("Produit non trouve");
-						}
-
-						if (String(produitDoc.magasin) !== String(magasin)) {
-							throw new Error("Produit n'appartient pas a ce magasin");
-						}
-
-						const stock = await getProduitStock(produit, produitDoc.unite, session);
-						if (stock < Number(qte)) {
-							throw new Error("Stock insuffisant");
-						}
-
-						const prixUnitaire = await getPrixUnitaireByDate(produit, venteDate, session);
-						const promotionProduit = await findPromotionForDetail({ produitId: produit, dateVente: venteDate }, session);
-
-						preparedDetails.push({
-							produit,
-							qte: Number(qte),
-							unite: produitDoc.unite,
-							prixUnitaire,
-							promotionProduit,
-							pourcentageProduit: promotionProduit ? toNumber(promotionProduit.pourcentage) : 0
-						});
-					}
-
-					const applyMagasinPromotionGlobally =
-						!!promotionVente &&
-						preparedDetails.every((d) => magasinPourcentage >= (d.pourcentageProduit || 0));
-
-					for (const d of preparedDetails) {
-						let prixTotal;
-						let promotion = null;
-
-						if (applyMagasinPromotionGlobally) {
-							prixTotal = d.qte * d.prixUnitaire;
-						} else {
-							const promoResult = applyBestPromotionToDetail({
-								produitId: d.produit,
-								qte: d.qte,
-								prixUnitaire: d.prixUnitaire,
-								promotionProduit: d.promotionProduit,
-								promotionMagasin: promotionVente
-							});
-
-							prixTotal = promoResult.prixTotal;
-							promotion = promoResult.promotion;
-							if (promotion) {
-								promotionsUsed.set(String(promotion._id), promotion);
-							}
-						}
-
-						await MvtStock.create(
-							[
-								{
-									qteEntree: 0,
-									qteSortie: d.qte,
-									dateMvtStock: venteDate,
-									unite: d.unite,
-									produit: d.produit
-								}
-							],
-							{ session }
-						);
-
-						detailDocs.push({
-							qte: d.qte,
-							prixUnitaire: d.prixUnitaire,
-							prixTotal,
-							pourcentagePromotion: promotion ? toNumber(promotion.pourcentage) : 0,
-							vente: vente._id,
-							produit: d.produit
-						});
-
-						totalVente += prixTotal;
-					}
-
-					if (applyMagasinPromotionGlobally && promotionVente) {
-						promotionsUsed.set(String(promotionVente._id), promotionVente);
-					}
-					if (updateResult.matchedCount === 0) {
-						throw new Error("Promotion epuissee");
-					}
+					throw new Error("produit et qte sont obligatoires pour chaque detail");
 				}
+
+				const produitDoc = await Produit.findById(produit)
+					.select("unite magasin")
+					.session(session)
+					.lean();
+
+				if (!produitDoc) {
+					throw new Error("Produit non trouve");
+				}
+
+				if (String(produitDoc.magasin) !== String(magasin)) {
+					throw new Error("Produit n'appartient pas a ce magasin");
+				}
+
+				const stock = await getProduitStock(produit, produitDoc.unite, session);
+				if (stock < Number(qte)) {
+					throw new Error("Stock insuffisant");
+				}
+
+				const prixUnitaire = await getPrixUnitaireByDate(produit, venteDate, session);
+				const promotionProduit = await findPromotionForDetail({ produitId: produit, dateVente: venteDate }, session);
+
+				preparedDetails.push({
+					produit,
+					qte: Number(qte),
+					unite: produitDoc.unite,
+					prixUnitaire,
+					promotionProduit,
+					pourcentageProduit: promotionProduit ? toNumber(promotionProduit.pourcentage) : 0
+				});
+			}
+
+			const applyMagasinPromotionGlobally =
+				!!promotionVente &&
+				preparedDetails.every((d) => magasinPourcentage >= (d.pourcentageProduit || 0));
+
+			for (const d of preparedDetails) {
+				let prixTotal;
+				let promotion = null;
+
+				if (applyMagasinPromotionGlobally) {
+					prixTotal = d.qte * d.prixUnitaire;
+				} else {
+					const promoResult = applyBestPromotionToDetail({
+						produitId: d.produit,
+						qte: d.qte,
+						prixUnitaire: d.prixUnitaire,
+						promotionProduit: d.promotionProduit,
+						promotionMagasin: promotionVente
+					});
+
+					prixTotal = promoResult.prixTotal;
+					promotion = promoResult.promotion;
+				}
+
+				await MvtStock.create(
+					[
+						{
+							qteEntree: 0,
+							qteSortie: d.qte,
+							dateMvtStock: venteDate,
+							unite: d.unite,
+							produit: d.produit
+						}
+					],
+					{ session }
+				);
+
+				detailDocs.push({
+					qte: d.qte,
+					prixUnitaire: d.prixUnitaire,
+					prixTotal,
+					pourcentagePromotion: promotion ? toNumber(promotion.pourcentage) : 0,
+					vente: vente._id,
+					produit: d.produit
+				});
+
+				totalVente += prixTotal;
 			}
 
 			const pourcentagePromotionVente = applyMagasinPromotionGlobally ? magasinPourcentage : 0;
