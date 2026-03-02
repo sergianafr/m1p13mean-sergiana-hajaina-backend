@@ -23,6 +23,7 @@ app.use("/api/type-produits", require("./routes/type-produit.route"));
 app.use("/api/unites", require("./routes/unite.route"));
 app.use("/api/boxs", require("./routes/box.route"));
 app.use("/api/loyer-boxs", require("./routes/loyer-box.route"));
+app.use("/api/paiement-loyers", require("./routes/paiement-loyer.route"));
 app.use("/api/magasins", require("./routes/magasin.route"));
 app.use("/api/users", require("./routes/user.route"));
 app.use("/api/produits", require("./routes/produit.route"));
