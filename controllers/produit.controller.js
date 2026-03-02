@@ -1,17 +1,15 @@
 const Produit = require("../models/produit");
+const PrixProduit = require("../models/prix-produit");
+const produitService = require("../services/produit.service");
 
 // CREATE
 exports.save = async (req, res) => {
     try {
-        const { nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin } = req.body;
-        const existing = await Produit.findOne({ nomProduit });
-        if (existing) {
-            return res.status(400).json({ message: "Produit déjà existant" });
-        }
-        const produit = await Produit.create({ nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin });
+        const produit = await produitService.createProduit(req.body, req.files || []);
         res.status(201).json({ message: "Produit créé", produit });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        const status = error.message === "Produit déjà existant" || error.message.includes("obligatoires") ? 400 : 500;
+        res.status(status).json({ message: error.message });
     }
 };
 
@@ -19,11 +17,17 @@ exports.save = async (req, res) => {
 exports.getAll = async (req, res) => {
     try {
         const produits = await Produit.find().populate("unite typeProduit magasin");
-        res.status(200).json(produits);
+        const produitIds = produits.map(p => p._id);
+        const prixList = await PrixProduit.find({ produit: { $in: produitIds }, dateFin: null });
+        const prixMap = {};
+        prixList.forEach(px => { prixMap[String(px.produit)] = px.prixUnitaire; });
+        const result = produits.map(p => ({ ...p.toObject(), prixActuel: prixMap[String(p._id)] ?? null }));
+        res.status(200).json(result);
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: error.message });
     }
-};
+}; 
 
 // READ ONE
 exports.getById = async (req, res) => {
@@ -33,7 +37,8 @@ exports.getById = async (req, res) => {
         if (!produit) {
             return res.status(404).json({ message: "Produit non trouvé" });
         }
-        res.status(200).json(produit);
+        const prix = await PrixProduit.findOne({ produit: id, dateFin: null }).sort({ dateDebut: -1 });
+        res.status(200).json({ ...produit.toObject(), prixActuel: prix?.prixUnitaire ?? null });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -43,18 +48,30 @@ exports.getById = async (req, res) => {
 exports.update = async (req, res) => {
     try {
         const { id } = req.params;
-        const { nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin } = req.body;
-        const updated = await Produit.findByIdAndUpdate(
-            id,
-            { nomProduit, descriptionProduit, seuilNotification, unite, typeProduit, magasin },
-            { new: true, runValidators: true }
-        );
-        if (!updated) {
-            return res.status(404).json({ message: "Produit non trouvé" });
-        }
-        res.status(200).json({ message: "Produit mis à jour", produit: updated });
+        const produit = await produitService.updateProduit(id, req.body, req.files || []);
+        res.status(200).json({ message: "Produit mis à jour", produit });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        const status = error.message === "Produit non trouvé" ? 404 : 500;
+        res.status(status).json({ message: error.message });
+    }
+};
+
+exports.removePhoto = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { imageUrl } = req.query;
+
+        const produit = await produitService.deleteProduitPhotoByUrl(id, imageUrl);
+        res.status(200).json({ message: "Photo supprimée", produit });
+    } catch (error) {
+        const status =
+            error.message === "produitId et imageUrl sont obligatoires" ||
+            error.message === "Photo non trouvée pour ce produit"
+                ? 400
+                : error.message === "Produit non trouvé"
+                    ? 404
+                    : 500;
+        res.status(status).json({ message: error.message });
     }
 };
 
@@ -69,5 +86,39 @@ exports.remove = async (req, res) => {
         res.status(200).json({ message: "Produit supprimé" });
     } catch (error) {
         res.status(500).json({ message: error.message });
+    }
+};
+
+// GET ALL WITH RATINGS
+exports.getAllWithRatings = async (req, res) => {
+    try {
+        const produits = await produitService.getAllProduitsWithRatings();
+        res.status(200).json(produits);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// GET BY ID WITH RATING
+exports.getByIdWithRating = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const produit = await produitService.getProduitByIdWithRating(id);
+        res.status(200).json(produit);
+    } catch (error) {
+        const status = error.message === "Produit non trouvé" ? 404 : 500;
+        res.status(status).json({ message: error.message });
+    }
+};
+
+// GET REVIEWS BY PRODUIT ID
+exports.getReviews = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const avis = await produitService.getReviewsByProduitId(id);
+        res.status(200).json(avis);
+    } catch (error) {
+        const status = error.message.includes("obligatoire") ? 400 : 500;
+        res.status(status).json({ message: error.message });
     }
 };
