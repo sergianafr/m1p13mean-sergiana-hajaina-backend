@@ -6,6 +6,7 @@ const Vente = require("../models/vente");
 const VenteDetail = require("../models/vente-detail");
 const Promotion = require("../models/promotion");
 const AvisMagasin = require("../models/avis-magasin");
+const AvisProduit = require("../models/avis-produit");
 const MvtStock = require("../models/mvt-stock");
 
 const toInt = (value, fallback) => {
@@ -129,7 +130,7 @@ const getStockAlerts = async ({ magasinId, limit = 5 }) => {
 	};
 };
 
-const getTopProduits = async ({ magasinId, startDate, endDate, limit = 5 }) => {
+const getTopProduitsByVentes = async ({ magasinId, startDate, endDate, limit = 5 }) => {
 	const agg = await VenteDetail.aggregate([
 		{
 			$lookup: {
@@ -153,7 +154,7 @@ const getTopProduits = async ({ magasinId, startDate, endDate, limit = 5 }) => {
 				revenue: { $sum: { $ifNull: ["$prixTotal", 0] } }
 			}
 		},
-		{ $sort: { revenue: -1 } },
+		{ $sort: { qteVendue: -1 } },
 		{ $limit: Math.max(1, limit) },
 		{
 			$lookup: {
@@ -168,6 +169,7 @@ const getTopProduits = async ({ magasinId, startDate, endDate, limit = 5 }) => {
 			$project: {
 				produitId: "$_id",
 				nomProduit: "$produitDoc.nomProduit",
+				photos: "$produitDoc.photos",
 				qteVendue: 1,
 				revenue: 1
 			}
@@ -177,9 +179,96 @@ const getTopProduits = async ({ magasinId, startDate, endDate, limit = 5 }) => {
 	return agg.map((row) => ({
 		produitId: row.produitId,
 		nomProduit: row.nomProduit || "(Produit supprimé)",
+		photos: Array.isArray(row.photos) ? row.photos : [],
 		qteVendue: Number(row.qteVendue) || 0,
 		revenue: Number(row.revenue) || 0
 	}));
+};
+
+const getTopProduitsByAvis = async ({ magasinId, limit = 5 }) => {
+	const produits = await Produit.find({ magasin: magasinId })
+		.select("nomProduit photos")
+		.lean();
+
+	if (!produits.length) {
+		return [];
+	}
+
+	const produitIds = produits.map((p) => p._id);
+
+	const avisAgg = await AvisProduit.aggregate([
+		{ $match: { produit: { $in: produitIds } } },
+		{
+			$group: {
+				_id: "$produit",
+				avisMoyen: { $avg: "$nombreEtoile" },
+				nombreAvis: { $sum: 1 }
+			}
+		},
+		{ $match: { nombreAvis: { $gte: 1 } } },
+		{ $sort: { avisMoyen: -1, nombreAvis: -1 } },
+		{ $limit: Math.max(1, limit) }
+	]);
+
+	const produitMap = new Map(produits.map((p) => [String(p._id), p]));
+
+	return avisAgg.map((row) => {
+		const prod = produitMap.get(String(row._id));
+		return {
+			produitId: row._id,
+			nomProduit: prod?.nomProduit || "(Produit supprimé)",
+			photos: Array.isArray(prod?.photos) ? prod.photos : [],
+			avisMoyen: Number((Number(row.avisMoyen) || 0).toFixed(2)),
+			nombreAvis: Number(row.nombreAvis) || 0
+		};
+	});
+};
+
+const getPromotionsDetails = async ({ magasinId }) => {
+	const now = new Date();
+	const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+	const [promotionsActives, promotionsExpirentBientot] = await Promise.all([
+		Promotion.find({
+			magasin: magasinId,
+			dateDebut: { $lte: now },
+			dateFin: { $gte: now }
+		})
+			.populate("produit", "nomProduit photos")
+			.select("pourcentage qte dateDebut dateFin produit")
+			.sort({ dateFin: 1 })
+			.limit(10)
+			.lean(),
+		Promotion.find({
+			magasin: magasinId,
+			dateFin: { $gte: now, $lte: in7Days }
+		})
+			.populate("produit", "nomProduit photos")
+			.select("pourcentage qte dateDebut dateFin produit")
+			.sort({ dateFin: 1 })
+			.limit(10)
+			.lean()
+	]);
+
+	const formatPromo = (p) => ({
+		promotionId: p._id,
+		pourcentage: Number(p.pourcentage) || 0,
+		qte: Number(p.qte) || -1,
+		dateDebut: p.dateDebut,
+		dateFin: p.dateFin,
+		produit: p.produit
+			? {
+					produitId: p.produit._id,
+					nomProduit: p.produit.nomProduit || "(Sans nom)",
+					photos: Array.isArray(p.produit.photos) ? p.produit.photos : []
+			  }
+			: null
+	});
+
+	return {
+		promotionsActives: promotionsActives.map(formatPromo),
+		promotionsExpirentBientot: promotionsExpirentBientot.map(formatPromo)
+	};
 };
 
 const getBoutiqueDashboard = async ({ userId, magasinId, year, days }) => {
@@ -245,10 +334,12 @@ const getBoutiqueDashboard = async ({ userId, magasinId, year, days }) => {
 	const ventesRecent = ventesRecentAgg?.[0] || { nombreVentes: 0, revenue: 0 };
 	const avisMagasin = avisMagasinAgg?.[0] || { avisMoyen: 0, nombreAvis: 0 };
 
-	const [monthly, stockAlerts, topProduits] = await Promise.all([
+	const [monthly, stockAlerts, topProduitsByVentes, topProduitsByAvis, promotionsDetails] = await Promise.all([
 		getMonthlyRevenue({ magasinId: magasin._id, year: selectedYear }),
 		getStockAlerts({ magasinId: magasin._id, limit: 5 }),
-		getTopProduits({ magasinId: magasin._id, startDate: recentStart, endDate: now, limit: 5 })
+		getTopProduitsByVentes({ magasinId: magasin._id, startDate: recentStart, endDate: now, limit: 5 }),
+		getTopProduitsByAvis({ magasinId: magasin._id, limit: 5 }),
+		getPromotionsDetails({ magasinId: magasin._id })
 	]);
 
 	return {
@@ -275,7 +366,9 @@ const getBoutiqueDashboard = async ({ userId, magasinId, year, days }) => {
 		},
 		monthly,
 		stockAlerts,
-		topProduits
+		topProduitsByVentes,
+		topProduitsByAvis,
+		promotionsDetails
 	};
 };
 
